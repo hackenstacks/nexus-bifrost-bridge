@@ -1,0 +1,61 @@
+# NeXuS Command Center - Docker/Podman Build
+# Unified control plane for anonymity networks
+#
+# Build:   docker build -t nexus-command-center .
+# Run:     docker run -d -p 8800:8800 -p 8801:8801 nexus-command-center
+
+FROM python:3.11-slim-bookworm
+
+# Labels
+LABEL maintainer="NeXuS Project"
+LABEL description="Unified control plane for anonymity networks"
+LABEL version="1.0.0"
+
+# Environment
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    NEXUS_HOST=0.0.0.0 \
+    NEXUS_API_PORT=8801 \
+    NEXUS_UI_PORT=8800 \
+    NEXUS_DATA_DIR=/app/data \
+    NEXUS_RULES_FILE=bypass-rules.json
+
+# Create non-root user
+RUN groupadd -r nexus && useradd -r -g nexus nexus
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for layer caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create data directory with default empty rules
+RUN mkdir -p /app/data && \
+    echo '{"version":"1.0","rules":[]}' > /app/data/bypass-rules.json && \
+    chown -R nexus:nexus /app
+
+# Switch to non-root user
+USER nexus
+
+# Expose port (Dashboard + API served together)
+EXPOSE 8801
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8801/api/health/live || exit 1
+
+# Start application
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8801"]

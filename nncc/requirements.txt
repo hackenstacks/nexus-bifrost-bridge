@@ -1,0 +1,37 @@
+# NeXuS Command Center - Python Dependencies
+# FastAPI backend for network control and monitoring
+# Pins relaxed for Python 3.14 compatibility (pydantic-core 2.14.x does not support py3.14)
+
+# Core Framework
+fastapi>=0.111.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# WebSocket support
+websockets>=12.0
+
+# HTTP client for health checks
+httpx>=0.26.0
+aiohttp>=3.9.1
+
+# Podman/Docker API
+podman>=4.8.0
+
+# Data validation (>=2.8.0 required for Python 3.14 support)
+pydantic>=2.8.0
+pydantic-settings>=2.2.0
+
+# File watching for config changes
+watchfiles>=0.21.0
+
+# Async utilities
+asyncio-throttle>=1.0.2
+
+# Date/time handling
+python-dateutil>=2.8.2
+
+# Static file serving
+aiofiles>=23.2.1
+
+# CORS middleware (pulled in by fastapi, listed for clarity)
+starlette>=0.37.0

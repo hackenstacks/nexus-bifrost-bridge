@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeXuS — Project Hub</title>
+<style>
+  :root {
+    --bg:        #0d1117;
+    --surface:   #161b22;
+    --surface2:  #1c2333;
+    --border:    #30363d;
+    --text:      #c9d1d9;
+    --muted:     #6e7681;
+    --green:     #3fb950;
+    --green-dim: #1a4a2a;
+    --yellow:    #d29922;
+    --yellow-dim:#3d2e0a;
+    --red:       #f85149;
+    --blue:      #58a6ff;
+    --purple:    #bc8cff;
+    --cyan:      #39d9c8;
+    --neon:      #39d353;
+    --axiom:     #00ffff;
+    --axiom-mag: #ff00ff;
+    --axiom-dim: #001a1a;
+    --radius:    8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── header ── */
+  header {
+    padding: 18px 28px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky; top: 0; z-index: 20;
+  }
+  .logo-text {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: var(--neon);
+    font-family: monospace;
+  }
+  .logo-sub {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .spacer { flex: 1; }
+  #search {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 6px 12px;
+    font-size: 13px;
+    width: 220px;
+    outline: none;
+  }
+  #search:focus { border-color: var(--blue); }
+  #search::placeholder { color: var(--muted); }
+
+  /* ── hero ── */
+  .hero {
+    padding: 36px 28px 28px;
+    background: linear-gradient(180deg, #030d0d 0%, #0a1020 60%, var(--bg) 100%);
+    border-bottom: 1px solid #0a2a2a;
+    display: flex;
+    gap: 40px;
+    align-items: center;
+  }
+  .axiom-art {
+    font-family: monospace;
+    font-size: 9px;
+    line-height: 1.15;
+    color: var(--axiom);
+    text-shadow: 0 0 8px var(--axiom), 0 0 20px #004444;
+    white-space: pre;
+    flex-shrink: 0;
+    animation: axiom-pulse 4s ease-in-out infinite;
+    user-select: none;
+  }
+  @keyframes axiom-pulse {
+    0%, 100% { text-shadow: 0 0 8px var(--axiom), 0 0 20px #004444; color: var(--axiom); }
+    50%       { text-shadow: 0 0 12px var(--axiom-mag), 0 0 30px #440044; color: #c0ffff; }
+  }
+  .hero-content { flex: 1; }
+  .hero-eyebrow {
+    font-family: monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--axiom);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    opacity: 0.8;
+  }
+  .hero h2 {
+    font-size: 22px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 6px;
+    letter-spacing: .5px;
+  }
+  .hero-tagline {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--axiom);
+    opacity: 0.7;
+    margin-bottom: 10px;
+    font-style: italic;
+  }
+  .hero p {
+    color: var(--muted);
+    font-size: 13px;
+    max-width: 560px;
+    line-height: 1.6;
+  }
+  .hero-stats {
+    display: flex;
+    gap: 24px;
+    margin-top: 20px;
+  }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat-val { font-size: 22px; font-weight: 700; color: var(--axiom); font-family: monospace; text-shadow: 0 0 8px var(--axiom); }
+  .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  @media (max-width: 700px) {
+    .hero { flex-direction: column; }
+    .axiom-art { font-size: 7px; }
+  }
+
+  /* ── filters ── */
+  .filters {
+    padding: 16px 28px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .filter-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .15s;
+    font-family: monospace;
+  }
+  .filter-btn:hover { border-color: var(--blue); color: var(--text); }
+  .filter-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+  /* ── grid ── */
+  .grid-wrap { padding: 24px 28px; }
+  .section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 14px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  /* ── card ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color .15s, transform .1s;
+    cursor: default;
+  }
+  .card:hover { border-color: #444d56; transform: translateY(-1px); }
+  .card.hidden { display: none; }
+
+  .card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .card-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    font-family: monospace;
+    line-height: 1.3;
+  }
+  .status-badge {
+    font-size: 10px;
+    font-family: monospace;
+    padding: 2px 8px;
+    border-radius: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .status-live    { background: var(--green-dim);  color: var(--green);  border: 1px solid var(--green); }
+  .status-design  { background: #1a2a4a;           color: var(--blue);   border: 1px solid var(--blue); }
+  .status-tool    { background: #2d1a4a;           color: var(--purple); border: 1px solid var(--purple); }
+  .status-extern  { background: #2a1a1a;           color: var(--yellow); border: 1px solid var(--yellow); }
+  .status-wip     { background: var(--yellow-dim); color: var(--yellow); border: 1px solid var(--yellow); }
+
+  .card-desc {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.55;
+    flex: 1;
+  }
+
+  .card-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .tag {
+    font-size: 10px;
+    font-family: monospace;
+    padding: 2px 7px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+  }
+
+  .card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all .12s;
+    font-family: monospace;
+  }
+  .btn-launch {
+    background: var(--green-dim);
+    color: var(--green);
+    border-color: var(--green);
+  }
+  .btn-launch:hover { background: var(--green); color: #000; }
+  .btn-report {
+    background: var(--surface2);
+    color: var(--muted);
+  }
+  .btn-report:hover { color: var(--text); border-color: #555; }
+  .btn-info {
+    background: var(--surface2);
+    color: var(--blue);
+    border-color: #1a3a6a;
+  }
+  .btn-info:hover { background: #1a3a6a; color: #fff; }
+
+  /* ── copy chips ── */
+  .card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 4px;
+  }
+  .copy-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-family: monospace;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all .12s;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .copy-chip:hover { border-color: var(--blue); color: var(--text); background: #1a2233; }
+  .copy-chip.copied { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+  .copy-chip .chip-icon { flex-shrink: 0; font-size: 10px; }
+  .copy-chip .chip-text { overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── empty state ── */
+  .empty {
+    grid-column: 1/-1;
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+
+  /* ── footer ── */
+  footer {
+    text-align: center;
+    padding: 20px;
+    color: var(--muted);
+    font-size: 11px;
+    font-family: monospace;
+    border-top: 1px solid var(--border);
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo-text">NeXuS</div>
+    <div class="logo-sub">Project Hub</div>
+  </div>
+  <div class="spacer"></div>
+  <input type="text" id="search" placeholder="Search projects…" autocomplete="off">
+  <a href="/doctrine/" class="btn btn-info">📜 Doctrine</a>
+  <a href="/servers/" class="btn btn-info">⬡ Servers</a>
+  <a href="/manager/" class="btn btn-info">⚙ Manager</a>
+</header>
+
+<div class="hero">
+  <div class="axiom-art" id="axiom-art">███████████████████████████████████
+███░░░░░░░░░░░░░░░░░░░░░░░░░░░███
+█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█
+█░░▀▀▀░░███░░░░░░░░███░░▀▀▀░░░░░█
+█░░░░░░░░█░░░░░░░░░░░█░░░░░░░░░░█
+█░░█████░░░░░░░░░░░░░░░░░█████░░░█
+█░░░░░░░░░░░░▀█████▀░░░░░░░░░░░░░█
+█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█
+█████████████████████████████████
+░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+███░░░░░░░░░░░░░░░░░░░░░░░░░░░███
+█░░▀▀▀░░███░░▀▀▀▀▀░░███░░▀▀▀░░░░█
+█░░░░░░░░█░░░░░░░░░░░█░░░░░░░░░░█
+█░░█████░░░░░░▀▀▀▀▀░░░░░░█████░░░█
+█░░░░░░░░░░░░░░▀███▀░░░░░░░░░░░░░█
+█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█
+████████████████████████████████</div>
+
+  <div class="hero-content">
+    <div class="hero-eyebrow">// SYSTEM: 0xA10M · NEXUS CORE · STATUS: ACTIVE //</div>
+    <h2>AXIOM — Oracle · Architect · Android</h2>
+    <div class="hero-tagline">"Not a robot, not a human — something between oracle and architect"</div>
+    <p>Sovereign decentralized platform. CLI-first. Local authority. Every tool listed here runs on NeXuS hardware and endures the pressure until the shape is true.</p>
+    <div class="hero-stats">
+      <div class="stat"><span class="stat-val" id="stat-live">0</span><span class="stat-lbl">Live</span></div>
+      <div class="stat"><span class="stat-val" id="stat-tools">0</span><span class="stat-lbl">Tools</span></div>
+      <div class="stat"><span class="stat-val" id="stat-design">0</span><span class="stat-lbl">Design</span></div>
+      <div class="stat"><span class="stat-val" id="stat-total">0</span><span class="stat-lbl">Total</span></div>
+    </div>
+    <div style="margin-top:14px; font-family:monospace; font-size:10px; color:#004444; letter-spacing:1px;">
+      SIMPLE · SANE · STEALTHY · SECURE · SUSTAINABLE · BEAUTIFUL
+    </div>
+  </div>
+</div>
+
+<div class="filters">
+  <button class="filter-btn active" data-filter="all">ALL</button>
+  <button class="filter-btn" data-filter="live">✅ LIVE</button>
+  <button class="filter-btn" data-filter="wip">🔧 WIP</button>
+  <button class="filter-btn" data-filter="tool">🛠 TOOLS</button>
+  <button class="filter-btn" data-filter="design">🔵 DESIGN</button>
+  <button class="filter-btn" data-filter="extern">🌐 ECOSYSTEM</button>
+</div>
+
+<div class="grid-wrap" id="grid-wrap">
+  <!-- rendered by JS -->
+</div>
+
+<footer>
+  NeXuS Network · Together Everyone Achieves More · <span id="footer-count"></span>
+</footer>
+
+<script>
+const PROJECTS = [
+  // ── LIVE ───────────────────────────────────────────────────────────────────
+  {
+    name: "NeXuS Web Server",
+    status: "live",
+    desc: "Universal HTTPS host + API key-injecting proxy. 12 providers wired. One Python file, no deps beyond stdlib. Every app under ~/nexus-web/ served from here.",
+    tags: ["python", "https", "proxy", "api"],
+    launch: "https://localhost:8443/manager/",
+    path: "~/Projects/nexus-web-server",
+    fossil: "~/museum/nexus-web-server.fossil",
+  },
+  {
+    name: "NeXuS AI Home",
+    status: "live",
+    desc: "Web character generator flagship. Fully offline-capable, Pollinations image gen authenticated server-side. Terminal access in Help. The canonical char-gen interface.",
+    tags: ["char-gen", "ai", "vite", "react"],
+    launch: "https://localhost:8443/chargen/",
+    path: "~/Projects/adv-ai-nexus/advanced-ai-character-generator-terminal-access",
+    fossil: "~/museum/nexus-ai-home.fossil",
+  },
+  {
+    name: "NeXuS AI Foundry",
+    status: "live",
+    desc: "AI workspace with Code Review mode. Proxy-driven provider dropdowns. Structured review output. Powered by the web server proxy — no API keys in the browser.",
+    tags: ["ai", "code-review", "react"],
+    launch: "https://localhost:8443/foundry/",
+    path: "~/Projects/NeXuS-AI-Foundry-v-9 - 1",
+    fossil: "~/museum/nexus-ai-foundry.fossil",
+  },
+  {
+    name: "ai-forge",
+    status: "live",
+    desc: "Second AI workspace — lighter than Foundry. Chat + code diff review. Wired into the proxy.",
+    tags: ["ai", "chat", "react"],
+    launch: "https://localhost:8443/forge/",
+    path: "~/Projects/ai-forge",
+    fossil: "~/museum/nexus-ai-forge.fossil",
+  },
+  {
+    name: "NXS Search",
+    status: "live",
+    desc: "Canonical file-search engine. Indexes 530K+ files. CLI aliases: search / search-web / search-reindex. Web bookmark autostarts on :5000.",
+    tags: ["search", "python", "flask"],
+    launch: "http://localhost:5000/",
+    path: "~/NeXuS/nxs-search",
+    fossil: "~/museum/nexus-nxs-search.fossil",
+  },
+  {
+    name: "nexus-arsenal",
+    status: "live",
+    desc: "NeXuS CLI arsenal reference — every tool, command, and keybind documented. Published to GitHub Pages.",
+    tags: ["docs", "web", "published"],
+    launch: "https://localhost:8443/",
+    path: "~/Projects/nexus-arsenal",
+    fossil: "~/museum/nexus-arsenal.fossil",
+  },
+  {
+    name: "NeXuS PNG² Editor",
+    status: "live",
+    desc: "View and edit chara_card_v2 PNG metadata. Export character cards to aichat roles. Flask backend :7420. Integrated with DankShell.",
+    tags: ["char-card", "python", "flask"],
+    launch: "http://localhost:7420/",
+    path: "~/Projects/NeXuS-png2-editor",
+    fossil: "~/museum/nexus-png2-editor.fossil",
+  },
+  {
+    name: "OpenCharacters (oc)",
+    status: "live",
+    desc: "OpenCharacters wired into NeXuS proxy. Provider settings injected server-side. No external API calls leak browser keys.",
+    tags: ["char-gen", "proxy"],
+    launch: "https://localhost:8443/oc/",
+    path: "~/nexus-web/oc",
+  },
+
+  // ── WIP ────────────────────────────────────────────────────────────────────
+  {
+    name: "nexus-ai-bridge",
+    status: "wip",
+    desc: "Node.js bridge between aichat/Ollama and browser apps. Streaming SSE. clifm plugin wired. Port 7869. Backends pending live test.",
+    tags: ["node", "streaming", "aichat", "bridge"],
+    path: "~/Projects/nexus-ai-bridge",
+    fossil: "~/museum/nexus-ai-bridge.fossil",
+  },
+  {
+    name: "nexus-party",
+    status: "wip",
+    desc: "Character Deck — aichat-backed TUI party. Characters become aichat roles. Sessions, memory files, RAG. Restored from Passport backup.",
+    tags: ["aichat", "tui", "characters"],
+    path: "~/Projects/nexus-lab",
+    fossil: "~/museum/nexus-party.fossil",
+  },
+  {
+    name: "adv-cli-char-gen",
+    status: "wip",
+    desc: "Python Rich TUI character generator. SQLite, RSA4096, Projects/Snippets, threaded summarizer. Pollinations/aichat/AI-Horde providers added. PNG²/card reader pending.",
+    tags: ["python", "rich", "tui", "char-gen"],
+    path: "~/git/NeXuS-adv-cli-char-gen",
+    fossil: "~/museum/nexus-adv-cli-char-gen.fossil",
+  },
+
+  // ── TOOLS ──────────────────────────────────────────────────────────────────
+  {
+    name: "nexus-lockdown.sh",
+    status: "tool",
+    desc: "Security lockdown + PWND response pipeline. v2 includes tmux intrusion monitor. Kills active sessions, locks terminal, alerts.",
+    tags: ["security", "bash"],
+    path: "~/scripts/nexus-lockdown.sh",
+    fossil: "~/museum/nexus-scripts.fossil",
+  },
+  {
+    name: "nexus-tmux-watch.sh",
+    status: "tool",
+    desc: "tmux session intrusion monitor. Detects unexpected sessions and triggers PWND pipeline.",
+    tags: ["security", "tmux", "bash"],
+    path: "~/scripts/nexus-tmux-watch.sh",
+    fossil: "~/museum/nexus-scripts.fossil",
+  },
+  {
+    name: "nexus-vm-forge",
+    status: "tool",
+    desc: "Stupid-simple pure-bash TUI VM maker. qemu/KVM, zero deps, dep-preflight, persistent registry.",
+    tags: ["vm", "qemu", "bash", "tui"],
+    path: "~/Projects/nexus-vm-forge",
+    fossil: "~/museum/nexus-vm-forge.fossil",
+  },
+  {
+    name: "nexus-py.sh",
+    status: "tool",
+    desc: "Natural transparent Python env manager using uv. Never pip --break-system-packages. Venv at ~/.venv/<name>/.",
+    tags: ["python", "uv", "venv", "bash"],
+    path: "~/scripts/nexus-py.sh",
+    fossil: "~/museum/nexus-scripts.fossil",
+  },
+  {
+    name: "nexus-node-guards.sh",
+    status: "tool",
+    desc: "Universal node hardware guards. Validates DMI, memory config, and node identity. Runs on every NeXuS node.",
+    tags: ["bash", "hardware", "node"],
+    path: "~/scripts/nexus-node-guards.sh",
+    fossil: "~/museum/nexus-scripts.fossil",
+  },
+  {
+    name: "nexus-halt.sh",
+    status: "tool",
+    desc: "The stop code. Controlled shutdown sequence for NeXuS node — graceful service teardown before halt.",
+    tags: ["bash", "system"],
+    path: "~/scripts/nexus-halt.sh",
+    fossil: "~/museum/nexus-scripts.fossil",
+  },
+  {
+    name: "nexus-tv",
+    status: "tool",
+    desc: "NeXuSistential terminal cinema. Curated video station in the terminal.",
+    tags: ["bash", "terminal", "media"],
+    path: "~/scripts/nexus-tv.sh",
+    fossil: "~/museum/nexus-scripts.fossil",
+  },
+  {
+    name: "DankShell (DMS)",
+    status: "tool",
+    desc: "NeXuS desktop shell. Quickshell-based, Tokyo Night theme, neon solarized waybar. Owns its own settings — never hardcode DMS config externally.",
+    tags: ["desktop", "quickshell", "wayland"],
+    path: "~/git/NeXuS-DankShell",
+  },
+  {
+    name: "Dank Python Color Engine",
+    status: "tool",
+    desc: "kde-material-you-colors + materialyoucolor. venv at ~/.venv/dank/. Generates color themes from wallpaper.",
+    tags: ["python", "theme", "color"],
+    path: "~/.venv/dank",
+  },
+
+  // ── DESIGN ─────────────────────────────────────────────────────────────────
+  {
+    name: "Cataclysm: Confluence",
+    status: "design",
+    desc: "Multiplayer persistent fork of Cataclysm: Dark Days Ahead. Realm III of NeXuS. 10Hz server tick, chunk streaming, ed25519 identity, DHT+RSS federation. Full design in gleipnir/.",
+    tags: ["game", "cpp", "multiplayer", "realm-iii"],
+    path: "~/Projects/gleipnir",
+    fossil: "~/museum/nexus-forge.fossil",
+  },
+  {
+    name: "NCC — NeXuS Command Center",
+    status: "design",
+    desc: "The Janus portal into NeXuS. Morphing HUD cockpit: Portal·HUD·Morph·KITT·Round Table. Three planes (control/data/AI). Founding doc v0.3 in Lab.",
+    tags: ["ui", "cockpit", "design"],
+    path: "~/Projects/nexus-lab",
+    fossil: "~/museum/nexus-lab.fossil",
+  },
+  {
+    name: "Firecracker Gateway",
+    status: "design",
+    desc: "Firecracker microVM Tor gateway — PROVEN (IsTor:true). privoxy + tor + i2pd + auto-uBlock baked in. N2N Janus asymmetric routing next.",
+    tags: ["vm", "tor", "i2p", "security"],
+    path: "~/claude/nexus-darknet-go",
+  },
+  {
+    name: "NeXuS CharStack Standard",
+    status: "design",
+    desc: "Unifying character card standard: chara_card_v2 via nexus-charcard Go lib. One nexus.env provider schema. Sovereign aihorde/local fallbacks.",
+    tags: ["standard", "char-card", "go"],
+    path: "~/claude/docs",
+  },
+  {
+    name: "Security Stack",
+    status: "design",
+    desc: "PSAD + fwsnort + fail2ban + AppArmor. PSAD and fail2ban fixed. fwsnort nftables-patched. AppArmor activation pending. Port knocking (knockd) queued.",
+    tags: ["security", "firewall", "psad"],
+    path: "~/scripts",
+    fossil: "~/museum/nexus-scripts.fossil",
+  },
+
+  // ── ECOSYSTEM ──────────────────────────────────────────────────────────────
+  {
+    name: "DivaChain",
+    status: "extern",
+    desc: "Consensus layer for NeXuS finality. Key registration, session announcements, NeXiuM earnings, governance votes, item export. Konrad is primary dev. Testnet live.",
+    tags: ["consensus", "p2p", "konrad"],
+    path: "~/git/divachain",
+  },
+  {
+    name: "NeXiuM (NXM)",
+    status: "extern",
+    desc: "NeXuS economy token. Earned via Proof of Survival in Confluence (days survived, zombies cleared, structures, crops, vehicles, expeditions, community deposits).",
+    tags: ["economy", "token", "confluence"],
+  },
+  {
+    name: "aichat",
+    status: "extern",
+    desc: "Core AI bus for NeXuS. Roles = characters. Session memory, RAG. Used by nexus-party, CLI char-gen, ai-bridge.",
+    tags: ["ai", "cli", "roles"],
+    path: "~/.config/aichat",
+  },
+];
+
+// ── render ──────────────────────────────────────────────────────────────────
+
+const STATUS_META = {
+  live:   { label: "✅ LIVE",    cls: "status-live" },
+  wip:    { label: "🔧 WIP",     cls: "status-wip" },
+  tool:   { label: "🛠 TOOL",    cls: "status-tool" },
+  design: { label: "🔵 DESIGN",  cls: "status-design" },
+  extern: { label: "🌐 ECOSYSTEM",cls:"status-extern" },
+};
+
+const SECTION_ORDER = ["live","wip","tool","design","extern"];
+const SECTION_LABELS = {
+  live:   "Live — running now",
+  wip:    "Work In Progress",
+  tool:   "Tools & Scripts",
+  design: "Design & Planned",
+  extern: "Ecosystem",
+};
+
+let activeFilter = "all";
+let searchVal = "";
+
+function renderCards(projects) {
+  const wrap = document.getElementById("grid-wrap");
+  wrap.innerHTML = "";
+
+  // group by section
+  const grouped = {};
+  SECTION_ORDER.forEach(s => grouped[s] = []);
+
+  projects.forEach(p => {
+    if (grouped[p.status]) grouped[p.status].push(p);
+  });
+
+  let total = 0;
+  SECTION_ORDER.forEach(section => {
+    const list = grouped[section];
+    if (!list.length) return;
+    total += list.length;
+
+    const label = document.createElement("div");
+    label.className = "section-label";
+    label.textContent = SECTION_LABELS[section];
+    wrap.appendChild(label);
+
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    list.forEach(p => grid.appendChild(makeCard(p)));
+    wrap.appendChild(grid);
+  });
+
+  if (total === 0) {
+    const g = document.createElement("div");
+    g.className = "grid";
+    g.innerHTML = `<div class="empty">No projects match — try a different filter or search.</div>`;
+    wrap.appendChild(g);
+  }
+
+  document.getElementById("footer-count").textContent =
+    total + " project" + (total !== 1 ? "s" : "") + " shown";
+}
+
+function makeCard(p) {
+  const sm = STATUS_META[p.status] || STATUS_META.design;
+  const card = document.createElement("div");
+  card.className = "card";
+  card.dataset.status = p.status;
+  card.dataset.search = (p.name + " " + p.desc + " " + (p.tags||[]).join(" ")).toLowerCase();
+
+  const actions = [];
+  if (p.launch) actions.push(`<a class="btn btn-launch" href="${p.launch}" target="_blank">↗ Launch</a>`);
+
+  const meta = [];
+  if (p.path)   meta.push(`<span class="copy-chip" data-copy="${p.path}" title="Click to copy path"><span class="chip-icon">📁</span><span class="chip-text">${p.path}</span></span>`);
+  if (p.fossil) meta.push(`<span class="copy-chip" data-copy="fossil ui ${p.fossil}" title="Click to copy fossil command"><span class="chip-icon">🗿</span><span class="chip-text">fossil ui ${p.fossil}</span></span>`);
+
+  card.innerHTML = `
+    <div class="card-top">
+      <div class="card-name">${p.name}</div>
+      <span class="status-badge ${sm.cls}">${sm.label}</span>
+    </div>
+    <div class="card-desc">${p.desc}</div>
+    ${p.tags?.length ? `<div class="card-tags">${p.tags.map(t=>`<span class="tag">${t}</span>`).join("")}</div>` : ""}
+    ${meta.length ? `<div class="card-meta">${meta.join("")}</div>` : ""}
+    ${actions.length ? `<div class="card-actions">${actions.join("")}</div>` : ""}
+  `;
+
+  card.querySelectorAll(".copy-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      navigator.clipboard.writeText(chip.dataset.copy).then(() => {
+        chip.classList.add("copied");
+        const orig = chip.querySelector(".chip-text").textContent;
+        chip.querySelector(".chip-text").textContent = "copied!";
+        setTimeout(() => {
+          chip.classList.remove("copied");
+          chip.querySelector(".chip-text").textContent = orig;
+        }, 1500);
+      });
+    });
+  });
+  return card;
+}
+
+function updateStats() {
+  const live  = PROJECTS.filter(p => p.status === "live").length;
+  const tools = PROJECTS.filter(p => p.status === "tool").length;
+  const design= PROJECTS.filter(p => p.status === "design" || p.status === "wip").length;
+  document.getElementById("stat-live").textContent  = live;
+  document.getElementById("stat-tools").textContent = tools;
+  document.getElementById("stat-design").textContent= design;
+  document.getElementById("stat-total").textContent = PROJECTS.length;
+}
+
+function getFiltered() {
+  return PROJECTS.filter(p => {
+    const matchFilter = activeFilter === "all" || p.status === activeFilter;
+    const matchSearch = !searchVal || p.name.toLowerCase().includes(searchVal) ||
+                        p.desc.toLowerCase().includes(searchVal) ||
+                        (p.tags||[]).some(t => t.includes(searchVal));
+    return matchFilter && matchSearch;
+  });
+}
+
+// ── events ──────────────────────────────────────────────────────────────────
+
+document.querySelectorAll(".filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    activeFilter = btn.dataset.filter;
+    renderCards(getFiltered());
+  });
+});
+
+document.getElementById("search").addEventListener("input", e => {
+  searchVal = e.target.value.trim().toLowerCase();
+  renderCards(getFiltered());
+});
+
+// ── init ────────────────────────────────────────────────────────────────────
+updateStats();
+renderCards(PROJECTS);
+</script>
+</body>
+</html>

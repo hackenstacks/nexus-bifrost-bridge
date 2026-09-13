@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌀 NeXuS Command Center</title>
+
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌀</text></svg>">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/nexus.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="app-logo">
+                <span class="icon">🌀</span>
+                <span>NeXuS Command Center</span>
+            </div>
+
+            <div class="header-actions">
+                <span id="connection-status" class="status-indicator" title="Connection Status">
+                    <span class="pulse">●</span>
+                </span>
+                <button id="health-check-btn" class="btn btn-secondary">
+                    🔍 Health Check
+                </button>
+                <button id="refresh-btn" class="btn btn-secondary">
+                    🔄 Refresh
+                </button>
+                <a href="/docs" class="btn btn-secondary" target="_blank">
+                    📚 API Docs
+                </a>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Stats Row -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-bytes-in">0 B</div>
+                    <div class="stat-label">Traffic In</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-bytes-out">0 B</div>
+                    <div class="stat-label">Traffic Out</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-connections">0</div>
+                    <div class="stat-label">Connections</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-uptime">—</div>
+                    <div class="stat-label">Uptime</div>
+                </div>
+            </div>
+
+            <!-- Dashboard Grid -->
+            <div class="dashboard-grid">
+                <!-- Network Status Panel -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            📊 Network Status
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <table class="network-table">
+                            <thead>
+                                <tr>
+                                    <th>Network</th>
+                                    <th>Status</th>
+                                    <th>Latency</th>
+                                    <th>Traffic</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="network-table-body">
+                                <tr>
+                                    <td colspan="5" class="loading">
+                                        <div class="spinner"></div>
+                                        Loading networks...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Bypass Rules Panel -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            🔓 Bypass Rules
+                        </h2>
+                        <span class="badge" id="rule-count">0 rules</span>
+                    </div>
+                    <div class="card-body">
+                        <ul class="bypass-rules-list" id="bypass-rules-list">
+                            <li class="loading">
+                                <div class="spinner"></div>
+                                Loading rules...
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="quick-add">
+                        <input type="text"
+                               id="new-rule-pattern"
+                               placeholder="Enter domain or pattern..."
+                               autocomplete="off">
+                        <select id="new-rule-type">
+                            <option value="domain">Domain</option>
+                            <option value="wildcard">Wildcard</option>
+                            <option value="cidr">CIDR</option>
+                        </select>
+                        <button id="add-rule-btn" class="btn btn-primary">
+                            + Add
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Traffic Monitor -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            📡 Live Traffic
+                            <span class="pulse" style="color: var(--accent-success);">●</span>
+                        </h2>
+                        <div>
+                            <button class="btn-icon" id="pause-traffic" data-tooltip="Pause">
+                                ⏸️
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body traffic-monitor">
+                        <div class="traffic-log" id="traffic-log">
+                            <div class="traffic-entry">
+                                <span class="traffic-time">—</span>
+                                <span class="traffic-source">—</span>
+                                <span class="traffic-dest">Waiting for traffic...</span>
+                                <span class="traffic-network">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuration Panel -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            ⚙️ Configuration
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <!-- Tor Configuration -->
+                        <div class="config-section">
+                            <h3>🧅 Tor Configuration</h3>
+                            <div class="config-row">
+                                <span class="config-label">Active Instances</span>
+                                <span class="config-value">
+                                    <select id="tor-instances">
+                                        <option value="6" selected>6 nodes</option>
+                                        <option value="4">4 nodes</option>
+                                        <option value="3">3 nodes</option>
+                                    </select>
+                                </span>
+                            </div>
+                            <div class="config-row">
+                                <span class="config-label">Circuit Rotation</span>
+                                <span class="config-value">
+                                    <select id="circuit-rotation">
+                                        <option value="5">Every 5 min</option>
+                                        <option value="10" selected>Every 10 min</option>
+                                        <option value="15">Every 15 min</option>
+                                        <option value="30">Every 30 min</option>
+                                    </select>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Default Routing -->
+                        <div class="config-section">
+                            <h3>📊 Default Routing</h3>
+                            <div class="config-row">
+                                <span class="config-label">Default Network</span>
+                                <span class="config-value">
+                                    <select id="default-network">
+                                        <option value="tor" selected>🧅 Tor</option>
+                                        <option value="i2p">🟣 I2P</option>
+                                        <option value="yggdrasil">🟢 Yggdrasil</option>
+                                        <option value="direct">🔓 Direct</option>
+                                    </select>
+                                </span>
+                            </div>
+                            <div class="config-row">
+                                <span class="config-label">Auto-Failover</span>
+                                <span class="config-value">
+                                    <input type="checkbox" class="rule-toggle" id="auto-failover" checked>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Failover Order -->
+                        <div class="config-section">
+                            <h3>🔄 Failover Order</h3>
+                            <div class="config-row" style="flex-direction: column; align-items: flex-start;">
+                                <ol id="failover-order" style="margin-left: 20px; color: var(--text-secondary);">
+                                    <li>🧅 Tor</li>
+                                    <li>🟣 I2P</li>
+                                    <li>🟢 Yggdrasil</li>
+                                    <li>🔴 Reticulum</li>
+                                    <li>🦇 BATMAN-adv</li>
+                                    <li>🔓 Direct</li>
+                                </ol>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary" style="width: 100%; margin-top: var(--spacing-md);">
+                            💾 Apply Changes
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Jurisdiction Policy -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            ⚖️ Jurisdiction Policy
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <select id="jurisdiction-select" style="width: 100%; padding: var(--spacing-sm); background: var(--bg-tertiary); border: 1px solid var(--border-primary); color: var(--text-primary); border-radius: var(--radius-sm);">
+                            <option value="world">World (No Restrictions)</option>
+                            <option value="no-5-eyes">No 5-Eyes</option>
+                            <option value="no-9-eyes">No 9-Eyes</option>
+                            <option value="no-14-eyes">No 14-Eyes</option>
+                        </select>
+                        <p id="policy-status" style="margin-top: var(--spacing-sm); font-size: 0.8rem; color: var(--text-secondary);"></p>
+                        <button onclick="applyJurisdiction()" class="btn btn-primary" style="width: 100%; margin-top: var(--spacing-sm);">
+                            ⚖️ Apply Policy
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tor Circuits & Identity -->
+                <div class="card" style="grid-column: span 2;">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            🧅 Tor Circuits & Identity
+                        </h2>
+                        <div style="display: flex; gap: var(--spacing-sm); align-items: center;">
+                            <span style="font-size: 0.8rem; color: var(--text-secondary);">Exit IP: <span id="tor-exit-ip" style="color: var(--accent-success); font-weight: bold;">—</span></span>
+                            <button id="newnym-btn" onclick="requestNewIdentity()" class="btn btn-secondary">
+                                ⚡ New Identity
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <table class="network-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 60px;">ID</th>
+                                    <th style="width: 100px;">Status</th>
+                                    <th>Path (hops)</th>
+                                    <th style="width: 120px;">Purpose</th>
+                                </tr>
+                            </thead>
+                            <tbody id="circuits-list">
+                                <tr>
+                                    <td colspan="4" style="text-align: center; color: var(--text-muted);">
+                                        Loading circuits...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div id="tor-error" style="color: var(--accent-danger); font-size: 0.8rem; margin-top: var(--spacing-sm); display: none;"></div>
+                    </div>
+                </div>
+
+                <!-- Darknet Hosting -->
+                <div class="card" style="grid-column: span 2;">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            🚀 Darknet Hosting
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="quick-add" style="margin-bottom: var(--spacing-md);">
+                            <input id="host-name" placeholder="Service Name (e.g. blog)" style="flex: 2;">
+                            <select id="host-net">
+                                <option value="tor">Tor (.onion)</option>
+                                <option value="i2p">I2P (.b32.i2p)</option>
+                                <option value="yggdrasil">Yggdrasil (IPv6)</option>
+                                <option value="reticulum">Reticulum</option>
+                            </select>
+                            <input id="host-port" type="number" placeholder="Port" value="80" style="width: 80px;">
+                            <button onclick="exposeService()" class="btn btn-primary">🚀 EXPOSE</button>
+                        </div>
+                        <table class="network-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Network</th>
+                                    <th>Port</th>
+                                    <th>Dark Address</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hosting-list">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Darknet Services -->
+                <div class="card" style="grid-column: span 2;">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            🛠️ Darknet Services
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <table class="network-table">
+                            <thead>
+                                <tr>
+                                    <th>Service</th>
+                                    <th>Status</th>
+                                    <th>Port</th>
+                                    <th>Network</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="services-list">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Network Doctor -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            🩺 Network Doctor
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="doctor-results" style="font-size: 0.875rem;">
+                            Scanning...
+                        </div>
+                        <button onclick="runDoctor()" class="btn btn-secondary" style="width: 100%; margin-top: var(--spacing-md);">
+                            🔍 Run Scan
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Unified System Log -->
+                <div class="card" style="grid-column: span 2;">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            📜 Unified System Log
+                            <span id="log-count" style="color: var(--text-muted); font-size: 0.75rem; font-weight: normal;"></span>
+                        </h2>
+                        <div style="display: flex; gap: var(--spacing-sm);">
+                            <input id="log-filter" placeholder="Filter..." style="padding: 2px 8px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); color: var(--text-primary); border-radius: var(--radius-sm); font-size: 0.75rem;">
+                            <label style="font-size: 0.75rem; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;">
+                                <input type="checkbox" id="log-follow" checked> Follow
+                            </label>
+                            <button onclick="clearLogView()" class="btn-icon" title="Clear View">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="logs" style="height: 300px; overflow-y: auto; background: var(--bg-primary); padding: var(--spacing-sm); border-radius: var(--radius-sm); border: 1px solid var(--border-primary); font-family: 'SF Mono', monospace; font-size: 0.75rem;">
+                            <!-- Log entries -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OpenSnitch Panel -->
+                <div class="card" style="grid-column: span 2;">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            🛡️ OpenSnitch Firewall
+                        </h2>
+                        <div style="display: flex; gap: var(--spacing-sm); align-items: center;">
+                            <span id="opensnitch-status-badge" class="status-badge status-unknown">UNKNOWN</span>
+                            <button id="opensnitch-toggle-btn" onclick="toggleOpenSnitch()" class="btn btn-secondary btn-sm">Start</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="opensnitch-controls" style="display: none;">
+                            <div class="stats-row" style="margin-bottom: var(--spacing-md);">
+                                <div class="stat-card" style="padding: var(--spacing-sm);">
+                                    <div class="stat-value" id="opensnitch-rules-count" style="font-size: 1.5rem;">0</div>
+                                    <div class="stat-label">Active Rules</div>
+                                </div>
+                                <div class="stat-card" style="padding: var(--spacing-sm);">
+                                    <div class="stat-value" id="opensnitch-hits" style="font-size: 1.5rem;">0</div>
+                                    <div class="stat-label">Blocked Hits</div>
+                                </div>
+                            </div>
+                            <h3 style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: var(--spacing-sm);">Recent Hits</h3>
+                            <table class="network-table">
+                                <thead>
+                                    <tr>
+                                        <th>Application</th>
+                                        <th>Destination</th>
+                                        <th>Action</th>
+                                        <th>Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="opensnitch-hits-list">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="opensnitch-placeholder" style="text-align: center; padding: var(--spacing-lg); color: var(--text-muted);">
+                            <p>OpenSnitch API not detected or service stopped.</p>
+                            <p style="font-size: 0.75rem; margin-top: 8px;">Run: <code>rc-service opensnitchd start</code> to enable.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Node Info -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            ⚡ Node Info
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="config-row">
+                            <span class="config-label">Device IP</span>
+                            <span class="config-value" id="device-ip">192.168.88.x</span>
+                        </div>
+                        <div class="config-row">
+                            <span class="config-label">Gateway IP</span>
+                            <span class="config-value">192.168.88.1</span>
+                        </div>
+                        <div class="config-row">
+                            <span class="config-label">Routing Mode</span>
+                            <span class="config-value">Tor Anonymization</span>
+                        </div>
+                        <div class="config-row">
+                            <span class="config-label">DNS Status</span>
+                            <span class="config-value">Local (no leak)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Proxy Setup -->
+                <div class="card" style="grid-column: span 2;">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            🛡️ Proxy Setup
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="config-section">
+                            <h3>Tor SOCKS5 (Recommended)</h3>
+                            <div class="config-row">
+                                <span class="config-label">192.168.88.1 : 9050</span>
+                                <div class="action-buttons">
+                                    <button class="btn btn-secondary" onclick="copy('192.168.88.1')">Copy IP</button>
+                                    <button class="btn btn-secondary" onclick="copy('9050')">Copy Port</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="config-section">
+                            <h3>Privoxy HTTP (Auto-routes .onion/.i2p)</h3>
+                            <div class="config-row">
+                                <span class="config-label">192.168.88.1 : 8118</span>
+                                <div class="action-buttons">
+                                    <button class="btn btn-secondary" onclick="copy('192.168.88.1')">Copy IP</button>
+                                    <button class="btn btn-secondary" onclick="copy('8118')">Copy Port</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="config-section">
+                            <h3>Quick Usage</h3>
+                            <pre style="background: var(--bg-primary); padding: var(--spacing-sm); border-radius: var(--radius-sm); font-size: 0.75rem; margin-top: var(--spacing-sm);">curl --socks5-hostname 192.168.88.1:9050 https://check.torproject.org/</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File Share -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            📂 File Share
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="upload-area" style="border: 2px dashed var(--border-primary); border-radius: var(--radius-md); padding: var(--spacing-lg); text-align: center; cursor: pointer;">
+                            <p style="font-size: 2rem;">📂</p>
+                            <p>Drag & Drop files or click to upload</p>
+                            <input type="file" id="upload-input" style="display: none;" multiple>
+                        </div>
+                        <div id="file-list" style="margin-top: var(--spacing-md); font-size: 0.8rem;">
+                            <p style="color: var(--text-muted);">No files shared yet</p>
+                        </div>
+                        <div style="margin-top: var(--spacing-md);">
+                            <pre style="background: var(--bg-primary); padding: var(--spacing-sm); border-radius: var(--radius-sm); font-size: 0.7rem;">curl -X POST "http://192.168.88.1:5001/api/v0/add" -F "file=@yourfile"</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Network Map -->
+                <div class="card" style="grid-column: span 2;">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            🗺️ Network Map
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="status-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--spacing-sm);">
+                            <div class="stat-card" style="padding: var(--spacing-sm);">
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                    <span class="status-dot dot-yellow" id="dot-tor"></span>
+                                    <span>Tor</span>
+                                </div>
+                                <div id="status-tor" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">checking...</div>
+                            </div>
+                            <div class="stat-card" style="padding: var(--spacing-sm);">
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                    <span class="status-dot dot-yellow" id="dot-i2p"></span>
+                                    <span>I2P</span>
+                                </div>
+                                <div id="status-i2p" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">checking...</div>
+                            </div>
+                            <div class="stat-card" style="padding: var(--spacing-sm);">
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                    <span class="status-dot dot-yellow" id="dot-privoxy"></span>
+                                    <span>Privoxy</span>
+                                </div>
+                                <div id="status-privoxy" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">checking...</div>
+                            </div>
+                            <div class="stat-card" style="padding: var(--spacing-sm);">
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                    <span class="status-dot dot-yellow" id="dot-ipfs"></span>
+                                    <span>IPFS</span>
+                                </div>
+                                <div id="status-ipfs" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">checking...</div>
+                            </div>
+                            <div class="stat-card" style="padding: var(--spacing-sm);">
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                    <span class="status-dot dot-yellow" id="dot-ygg"></span>
+                                    <span>Yggdrasil</span>
+                                </div>
+                                <div id="status-ygg" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">checking...</div>
+                            </div>
+                            <div class="stat-card" style="padding: var(--spacing-sm);">
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                    <span class="status-dot dot-yellow" id="dot-haproxy"></span>
+                                    <span>HAProxy</span>
+                                </div>
+                                <div id="status-haproxy" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">checking...</div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: var(--spacing-md);">
+                            <h3 style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: var(--spacing-sm);">Onion Services</h3>
+                            <div class="config-row">
+                                <span class="config-label">txt-blogger</span>
+                                <span class="config-value" id="onion-txt" style="font-family: monospace; font-size: 0.8rem;">loading...</span>
+                            </div>
+                            <div class="config-row">
+                                <span class="config-label">Gemini</span>
+                                <span class="config-value" id="onion-gemini" style="font-family: monospace; font-size: 0.8rem;">loading...</span>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: var(--spacing-md);">
+                            <h3 style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: var(--spacing-sm);">Architecture</h3>
+                            <pre style="background: var(--bg-primary); padding: var(--spacing-sm); border-radius: var(--radius-sm); font-size: 0.7rem; font-family: monospace;">
+Your device
+    ↓ WiFi (192.168.88.0/24)
+NeXuS Node (192.168.88.1)
+    ├── Tor SOCKS5  → anonymized clearnet
+    ├── I2P HTTP    → .i2p network only
+    ├── Privoxy     → auto-routes .onion/.i2p
+    ├── IPFS        → distributed storage
+    ├── Yggdrasil   → encrypted mesh
+    └── HAProxy     → multi-circuit load balance</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Censorship Guide -->
+                <div class="card" style="grid-column: span 2;">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            📖 Censorship Guide
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <details style="margin-bottom: var(--spacing-sm);">
+                            <summary style="cursor: pointer; padding: var(--spacing-sm); background: var(--bg-tertiary); border-radius: var(--radius-sm);">1. Tor Bridges (when Tor is blocked)</summary>
+                            <div style="padding: var(--spacing-sm); font-size: 0.85rem;">
+                                <p>If your country blocks Tor, use bridges — unlisted Tor entry nodes.</p>
+                                <pre style="background: var(--bg-primary); padding: var(--spacing-sm); margin-top: 8px;">Get bridges at: https://bridges.torproject.org</pre>
+                            </div>
+                        </details>
+                        <details style="margin-bottom: var(--spacing-sm);">
+                            <summary style="cursor: pointer; padding: var(--spacing-sm); background: var(--bg-tertiary); border-radius: var(--radius-sm);">2. V2Ray / Xray (Advanced)</summary>
+                            <div style="padding: var(--spacing-sm); font-size: 0.85rem;">
+                                <p>V2Ray with VMess/VLESS protocol disguises traffic as normal HTTPS.</p>
+                            </div>
+                        </details>
+                        <details style="margin-bottom: var(--spacing-sm);">
+                            <summary style="cursor: pointer; padding: var(--spacing-sm); background: var(--bg-tertiary); border-radius: var(--radius-sm);">3. DNS over HTTPS</summary>
+                            <div style="padding: var(--spacing-sm); font-size: 0.85rem;">
+                                <p>Encrypted DNS bypasses DNS-level censorship.</p>
+                                <pre style="background: var(--bg-primary); padding: var(--spacing-sm); margin-top: 8px;">Cloudflare: https://1.1.1.1/dns-query</pre>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer style="padding: var(--spacing-md); text-align: center; color: var(--text-muted); font-size: 0.75rem;">
+            <p>🌀 NeXuS Command Center v1.0.0 | Unified Control Plane for Anonymity Networks</p>
+            <p>
+                <a href="/api">API</a> •
+                <a href="/docs">Documentation</a> •
+                <a href="/api/health">Health</a>
+            </p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/app.js"></script>
+</body>
+</html>

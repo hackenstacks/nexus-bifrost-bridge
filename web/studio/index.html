@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Na PH · Element 11 Production Studio</title>
+<script src="lib/xterm.js"></script>
+<script src="lib/xterm-addon-fit.js"></script>
+<style>
+  :root {
+    --bg:  #0a0a0f;
+    --bg2: #0f0f1a;
+    --cy:  #00e5ff;
+    --gr:  #00ff87;
+    --re:  #ff3b3b;
+    --yw:  #ffd600;
+    --dm:  #444466;
+    --txt: #c8d0e0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:'JetBrains Mono',monospace;font-size:13px;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+  /* header */
+  #hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid #1a1a2e;background:var(--bg2);flex-shrink:0}
+  #hdr .brand{display:flex;align-items:baseline;gap:10px}
+  #hdr .na{font-size:22px;font-weight:900;color:var(--cy);letter-spacing:2px}
+  #hdr .ph{font-size:11px;color:var(--dm);letter-spacing:3px;text-transform:uppercase}
+  #hdr .sub{font-size:10px;color:var(--dm);letter-spacing:2px}
+  #hdr .controls{display:flex;gap:8px;align-items:center}
+
+  /* status dots */
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .dot.on{background:var(--gr)}
+  .dot.off{background:var(--re)}
+
+  /* tabs */
+  #tabs{display:flex;gap:1px;padding:0 16px;background:var(--bg2);border-bottom:1px solid #1a1a2e;flex-shrink:0}
+  .tab{padding:8px 18px;font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;color:var(--dm);border-bottom:2px solid transparent;transition:all .2s}
+  .tab:hover{color:var(--txt)}
+  .tab.active{color:var(--cy);border-bottom-color:var(--cy)}
+
+  /* panels */
+  #panels{flex:1;overflow:hidden;display:flex;flex-direction:column}
+  .panel{display:none;flex:1;flex-direction:column;overflow:hidden}
+  .panel.active{display:flex}
+
+  /* terminal panel */
+  #term-bar{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg2);border-bottom:1px solid #1a1a2e;flex-shrink:0}
+  #term-bar .sec{font-size:10px;letter-spacing:2px;color:var(--dm)}
+  #term-container{flex:1;padding:4px;background:#000}
+  .xterm{height:100%}
+  .xterm-viewport{overflow-y:hidden!important}
+
+  /* btn */
+  .btn{padding:4px 12px;font-size:10px;letter-spacing:1px;text-transform:uppercase;background:transparent;border:1px solid var(--dm);color:var(--dm);cursor:pointer;font-family:inherit;transition:all .2s}
+  .btn:hover{border-color:var(--cy);color:var(--cy)}
+  .btn.on{border-color:var(--gr);color:var(--gr)}
+  .btn.danger:hover{border-color:var(--re);color:var(--re)}
+
+  /* status panel */
+  #status-panel{padding:16px;overflow-y:auto;display:flex;gap:16px;flex-wrap:wrap}
+  .svc-card{background:var(--bg2);border:1px solid #1a1a2e;padding:12px 16px;min-width:180px;flex:1}
+  .svc-card h3{font-size:10px;letter-spacing:2px;color:var(--dm);margin-bottom:8px;text-transform:uppercase}
+  .svc-row{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px}
+
+  /* track B schedule */
+  #sched-list{padding:0 16px;overflow-y:auto;flex:1}
+  .sched-row{display:flex;gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid #1a1a2e;font-size:12px}
+  .sched-time{color:var(--yw);min-width:60px}
+  .sched-file{color:var(--txt);flex:1}
+  .add-sched{padding:12px 16px;background:var(--bg2);border-top:1px solid #1a1a2e;display:flex;gap:8px;flex-shrink:0}
+  .add-sched input{background:transparent;border:1px solid var(--dm);color:var(--txt);padding:4px 8px;font-family:inherit;font-size:12px;outline:none}
+  .add-sched input:focus{border-color:var(--cy)}
+  .add-sched input[type=time]{width:100px}
+  .add-sched input[type=text]{flex:1}
+
+  /* xterm minimal CSS */
+  .xterm{position:relative;user-select:none;-webkit-user-select:none}
+  .xterm-viewport{overflow-y:auto;background:transparent}
+  .xterm-screen{position:relative;display:block}
+  .xterm-screen canvas{position:absolute;top:0;left:0}
+  .xterm-helpers{position:absolute;top:0;z-index:5}
+  .xterm-helpers textarea{position:absolute;opacity:0;left:-9999em;top:0;width:0;height:0;z-index:-5;white-space:nowrap;overflow:hidden;resize:none}
+  .xterm-char-measure-element{display:inline-block;visibility:hidden;position:absolute;top:0;left:-9999em}
+  .xterm-selection div{position:absolute;pointer-events:none}
+  .xterm-decoration-container .xterm-decoration{position:absolute}
+  .xterm-link-layer{position:absolute;top:0;left:0;pointer-events:none}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="hdr">
+  <div class="brand">
+    <span class="na">Na</span><span class="ph">PH</span>
+    <span class="sub">Element 11 Production · The NeXuS Aether Production House</span>
+  </div>
+  <div class="controls">
+    <span id="mpd-dot" class="dot off" title="MPD"></span>
+    <span style="font-size:10px;color:var(--dm)">MPD</span>
+    <span id="ice-dot" class="dot off" title="Icecast"></span>
+    <span style="font-size:10px;color:var(--dm)">ICE</span>
+    <span id="owc-dot" class="dot off" title="Owncast"></span>
+    <span style="font-size:10px;color:var(--dm)">OWN</span>
+    <button class="btn" onclick="refreshStatus()">↺</button>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div id="tabs">
+  <div class="tab active" onclick="switchTab('terminal')">Terminal</div>
+  <div class="tab" onclick="switchTab('status')">Status</div>
+  <div class="tab" onclick="switchTab('schedule')">Track B</div>
+</div>
+
+<!-- Panels -->
+<div id="panels">
+
+  <!-- Terminal panel -->
+  <div class="panel active" id="panel-terminal">
+    <div id="term-bar">
+      <span class="sec">Na PH Shell</span>
+      <button class="btn" id="connect-btn" onclick="termToggle()">CONNECT</button>
+      <button class="btn" onclick="termClear()">CLEAR</button>
+      <button class="btn danger" onclick="termInject('nexus-aether.sh status\n')">AETHER STATUS</button>
+      <button class="btn" onclick="termInject('nexus-aether.sh radio status\n')">RADIO</button>
+      <button class="btn" onclick="termInject('nexus-aether-scheduler.sh status\n')">TRACK B</button>
+      <button class="btn" onclick="termInject('nexus-aether.sh flames --dry\n')">FLAMES DRY</button>
+    </div>
+    <div id="term-container"></div>
+  </div>
+
+  <!-- Status panel -->
+  <div class="panel" id="panel-status">
+    <div id="status-panel">
+      <div class="svc-card">
+        <h3>Track A — MPD</h3>
+        <div id="mpd-status"><div class="svc-row"><span class="dot off"></span>Loading...</div></div>
+      </div>
+      <div class="svc-card">
+        <h3>Studio — Broadcast</h3>
+        <div id="studio-status">
+          <div class="svc-row"><span id="ice-svc" class="dot off"></span>Icecast :8000</div>
+          <div class="svc-row"><span id="owc-svc" class="dot off"></span>Owncast :8086</div>
+          <div class="svc-row"><span id="mur-svc" class="dot off"></span>Murmur :64738</div>
+        </div>
+      </div>
+      <div class="svc-card">
+        <h3>Track B — Scheduler</h3>
+        <div id="sched-status"><div class="svc-row"><span class="dot off"></span>Loading...</div></div>
+      </div>
+    </div>
+    <div style="padding:0 16px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="execCmd('aether radio start')">Start MPD</button>
+      <button class="btn danger" onclick="execCmd('aether radio stop')">Stop MPD</button>
+      <button class="btn" onclick="execCmd('nexus-studio start')">Studio On</button>
+      <button class="btn danger" onclick="execCmd('nexus-studio stop')">Studio Off</button>
+      <button class="btn" onclick="execCmd('aether scheduler start')">Sched On</button>
+    </div>
+  </div>
+
+  <!-- Track B schedule panel -->
+  <div class="panel" id="panel-schedule">
+    <div id="sched-list" style="padding:16px">
+      <div style="color:var(--dm);font-size:11px;letter-spacing:1px">Loading schedule...</div>
+    </div>
+    <div class="add-sched">
+      <input type="time" id="sched-time" placeholder="HH:MM">
+      <input type="text" id="sched-file" placeholder="/path/to/ad.mp3 or +N for track offset">
+      <button class="btn on" onclick="addSchedule()">+ ADD</button>
+      <button class="btn danger" onclick="clearSchedule()">CLEAR ALL</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Tab switching ─────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const panels = ['terminal','status','schedule'];
+    t.classList.toggle('active', panels[i] === name);
+    document.getElementById('panel-'+panels[i]).classList.toggle('active', panels[i] === name);
+  });
+  if (name === 'status')   refreshStatus();
+  if (name === 'schedule') refreshSchedule();
+}
+
+// ── xterm terminal ────────────────────────────────────────────
+let termInstance = null, termWs = null, termOpen = false;
+const WS_URL = `wss://${location.host}/api/nexus/studio/terminal`;
+
+function termClear() { if (termInstance) termInstance.clear(); }
+
+function termInject(cmd) {
+  if (termWs && termWs.readyState === WebSocket.OPEN)
+    termWs.send(new TextEncoder().encode(cmd));
+  else
+    termToggle().then(() => setTimeout(() => termInject(cmd), 800));
+}
+
+window.termToggle = function() {
+  return new Promise(resolve => {
+    const btn = document.getElementById('connect-btn');
+    if (termOpen) {
+      if (termWs) { termWs.close(); termWs = null; }
+      termOpen = false;
+      btn.textContent = 'CONNECT'; btn.classList.remove('on');
+      return resolve();
+    }
+
+    if (!termInstance) {
+      const fitAddon = new FitAddon.FitAddon();
+      termInstance = new Terminal({
+        theme: { background:'#000000', foreground:'#c8d0e0', cursor:'#00e5ff',
+                 selectionBackground:'#1a3a6b', black:'#0a0a0f', brightBlack:'#444466',
+                 cyan:'#00e5ff', brightCyan:'#00ffff', green:'#00ff87', brightGreen:'#00ff87' },
+        fontFamily: "'JetBrains Mono','Fira Code',monospace",
+        fontSize: 13, cursorBlink: true, scrollback: 2000
+      });
+      termInstance.loadAddon(fitAddon);
+      termInstance.open(document.getElementById('term-container'));
+      fitAddon.fit();
+
+      termInstance.onData(d => {
+        if (termWs && termWs.readyState === WebSocket.OPEN)
+          termWs.send(new TextEncoder().encode(d));
+      });
+      termInstance.onResize(({cols, rows}) => {
+        if (termWs && termWs.readyState === WebSocket.OPEN)
+          termWs.send(new TextEncoder().encode(
+            JSON.stringify({type:'resize', rows, cols})));
+      });
+      window.addEventListener('resize', () => fitAddon.fit());
+    }
+
+    termWs = new WebSocket(WS_URL);
+    termWs.binaryType = 'arraybuffer';
+    termWs.onopen = () => {
+      termOpen = true; btn.textContent = 'DISCONNECT'; btn.classList.add('on');
+      resolve();
+    };
+    termWs.onmessage = e => {
+      const data = e.data instanceof ArrayBuffer
+        ? new Uint8Array(e.data) : new TextEncoder().encode(e.data);
+      termInstance.write(data);
+    };
+    termWs.onclose = () => {
+      termOpen = false; btn.textContent = 'CONNECT'; btn.classList.remove('on');
+    };
+    termWs.onerror = () => termInstance.writeln('\r\n\x1b[31m[connection error]\x1b[0m');
+  });
+};
+
+// ── Status polling ────────────────────────────────────────────
+async function execCmd(cmd) {
+  try {
+    const r = await fetch('/api/nexus/exec', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({cmd})
+    });
+    return await r.json();
+  } catch(e) { return {ok:false, error:String(e)}; }
+}
+
+async function refreshStatus() {
+  // MPD
+  const mpd = await execCmd('aether radio status');
+  document.getElementById('mpd-status').innerHTML = mpd.ok
+    ? `<div class="svc-row"><span class="dot on"></span><pre style="font-size:11px;white-space:pre-wrap">${mpd.stdout.slice(0,300)}</pre></div>`
+    : `<div class="svc-row"><span class="dot off"></span>MPD stopped</div>`;
+
+  // Port checks
+  const pc = await fetch('/api/nexus/portcheck?ports=8000,8086,64738').then(r=>r.json()).catch(()=>({}));
+  const dot = (id, port) => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'dot ' + (pc[port]==='up' ? 'on' : 'off');
+  };
+  dot('ice-svc','8000'); dot('owc-svc','8086'); dot('mur-svc','64738');
+  dot('mpd-dot','6600'); dot('ice-dot','8000'); dot('owc-dot','8086');
+
+  // Scheduler
+  const sc = await execCmd('aether scheduler status');
+  document.getElementById('sched-status').innerHTML = sc.ok
+    ? `<div class="svc-row"><span class="dot on"></span>Running</div>`
+    : `<div class="svc-row"><span class="dot off"></span>Stopped</div>`;
+}
+
+async function refreshSchedule() {
+  const r = await execCmd('aether scheduler list');
+  const el = document.getElementById('sched-list');
+  if (!r.stdout || !r.stdout.trim()) {
+    el.innerHTML = '<div style="color:var(--dm);font-size:11px;padding:8px">No scheduled items.</div>';
+    return;
+  }
+  const lines = r.stdout.trim().split('\n').filter(l => l.trim());
+  el.innerHTML = lines.map(l => {
+    const parts = l.trim().split(/\s+/);
+    return `<div class="sched-row">
+      <span class="sched-time">${parts[0]||''}</span>
+      <span class="sched-file">${parts.slice(1).join(' ')}</span>
+    </div>`;
+  }).join('');
+}
+
+async function addSchedule() {
+  const t = document.getElementById('sched-time').value;
+  const f = document.getElementById('sched-file').value.trim();
+  if (!t || !f) return;
+  await fetch('/api/nexus/exec', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({cmd:`aether scheduler add ${t} ${f}`})
+  });
+  document.getElementById('sched-time').value = '';
+  document.getElementById('sched-file').value = '';
+  refreshSchedule();
+}
+
+async function clearSchedule() {
+  if (!confirm('Clear all scheduled items?')) return;
+  await execCmd('aether scheduler clear');
+  refreshSchedule();
+}
+
+// ── Auto-connect terminal on load ─────────────────────────────
+window.addEventListener('load', () => {
+  termToggle();
+  refreshStatus();
+  setInterval(refreshStatus, 10000);
+});
+</script>
+</body>
+</html>

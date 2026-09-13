@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeXuS Proxy Manager</title>
+<style>
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --surface2: #1c2333;
+    --border:   #30363d;
+    --text:     #c9d1d9;
+    --muted:    #6e7681;
+    --green:    #3fb950;
+    --green-dim:#1a4a2a;
+    --yellow:   #d29922;
+    --yellow-dim:#3d2e0a;
+    --red:      #f85149;
+    --blue:     #58a6ff;
+    --purple:   #bc8cff;
+    --neon:     #39d353;
+    --radius:   8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── top bar ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 16px; font-weight: 700; letter-spacing: .5px; color: #fff; }
+  header .logo { font-size: 20px; }
+  .spacer { flex: 1; }
+  .badge {
+    font-size: 11px; font-family: monospace;
+    padding: 3px 10px; border-radius: 20px;
+    border: 1px solid currentColor;
+  }
+  .badge.live   { color: var(--green);  background: var(--green-dim);  border-color: var(--green); }
+  .badge.down   { color: var(--yellow); background: var(--yellow-dim); border-color: var(--yellow); }
+  .badge.loading{ color: var(--muted);  background: var(--surface2);   border-color: var(--border); }
+  .port-badge { color: var(--blue); font-family: monospace; font-size: 12px; }
+
+  button.icon-btn {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--radius);
+    padding: 5px 12px; cursor: pointer; font-size: 13px;
+    transition: background .15s;
+  }
+  button.icon-btn:hover { background: var(--border); }
+
+  /* ── layout ── */
+  main { padding: 24px; display: flex; flex-direction: column; gap: 28px; max-width: 1400px; }
+
+  section { }
+  .section-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--muted);
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* ── card grid ── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    display: flex; flex-direction: column; gap: 6px;
+    transition: border-color .15s, transform .1s;
+  }
+  .card:hover { border-color: var(--blue); transform: translateY(-1px); }
+
+  .card .card-name {
+    font-weight: 600; font-size: 13px; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .card .card-sub {
+    font-size: 11px; color: var(--muted); font-family: monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .card .card-status {
+    font-size: 11px; margin-top: 2px;
+  }
+  .dot-green  { color: var(--green); }
+  .dot-yellow { color: var(--yellow); }
+  .dot-muted  { color: var(--muted); }
+
+  /* app cards wider */
+  .app-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .app-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 8px;
+    position: relative;
+  }
+  .app-card:hover { border-color: var(--blue); }
+  .app-card .app-name { font-weight: 700; font-size: 15px; color: #fff; }
+  .app-card .app-url  { font-size: 11px; font-family: monospace; color: var(--blue); }
+  .app-card .app-path { font-size: 10px; color: var(--muted); word-break: break-all; }
+  .app-card .open-btn {
+    margin-top: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--blue); border-radius: 6px;
+    padding: 5px 0; text-align: center;
+    text-decoration: none; font-size: 12px; font-weight: 600;
+    display: block; transition: background .15s;
+  }
+  .app-card .open-btn:hover { background: var(--border); }
+
+  /* ── wire panel ── */
+  .wire-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .wire-row {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
+  }
+  .wire-row label { display: flex; flex-direction: column; gap: 4px; }
+  .wire-row label span { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .wire-row input {
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; padding: 7px 10px;
+    font-family: monospace; font-size: 12px; outline: none;
+    transition: border-color .15s;
+  }
+  .wire-row input:focus { border-color: var(--blue); }
+  #wire-path  { width: 360px; }
+  #wire-name  { width: 140px; }
+  #wire-btn {
+    padding: 7px 20px; background: var(--blue); color: #000;
+    border: none; border-radius: 6px; font-weight: 700;
+    font-size: 13px; cursor: pointer; transition: opacity .15s;
+    white-space: nowrap;
+  }
+  #wire-btn:hover  { opacity: .85; }
+  #wire-btn:disabled { opacity: .4; cursor: default; }
+
+  .console {
+    background: #0a0e14;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-family: monospace; font-size: 12px; line-height: 1.6;
+    color: #8ddb6e;
+    min-height: 80px; max-height: 320px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    display: none;
+  }
+  .console.visible { display: block; }
+  .console .err { color: var(--red); }
+  .console .ok  { color: var(--neon); }
+
+  /* ── empty state ── */
+  .empty { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
+
+  /* ── provider big grid ── */
+  .provider-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+  }
+  .prov-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .prov-card.ready  { border-color: #1a4a2a; }
+  .prov-card.nokey  { border-color: #3d2e0a; }
+  .prov-name { font-weight: 600; font-size: 13px; color: #fff; }
+  .prov-kind { font-size: 10px; color: var(--muted); font-family: monospace; }
+  .prov-key  { font-size: 11px; margin-top: 2px; }
+
+  /* ── pulse animation on live dot ── */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">⚡</span>
+  <h1>NeXuS Proxy Manager</h1>
+  <span class="port-badge">:8443</span>
+  <div class="spacer"></div>
+  <span id="proxy-badge" class="badge loading">… connecting</span>
+  <button class="icon-btn" onclick="refresh()">↺ Refresh</button>
+</header>
+
+<main>
+
+  <!-- Providers -->
+  <section>
+    <div class="section-title">AI Providers</div>
+    <div id="providers" class="provider-grid">
+      <div class="empty">Loading providers…</div>
+    </div>
+  </section>
+
+  <!-- Apps -->
+  <section>
+    <div class="section-title">Served Apps</div>
+    <div id="apps" class="app-grid">
+      <div class="empty">Loading apps…</div>
+    </div>
+  </section>
+
+  <!-- Backend Apps -->
+  <section>
+    <div class="section-title">Backend Apps</div>
+    <div id="backend-apps" class="app-grid">
+      <div class="empty">Checking backends…</div>
+    </div>
+  </section>
+
+  <!-- Wire new app -->
+  <section>
+    <div class="section-title">Wire New App</div>
+    <div class="wire-panel">
+      <div class="wire-row">
+        <label>
+          <span>App Directory (absolute path)</span>
+          <input id="wire-path" type="text" placeholder="/home/user/Projects/my-app" />
+        </label>
+        <label>
+          <span>Name (optional)</span>
+          <input id="wire-name" type="text" placeholder="my-app" />
+        </label>
+        <button id="wire-btn" onclick="wireApp()">⚙ Wire</button>
+      </div>
+      <div id="wire-console" class="console"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+const origin = window.location.origin;
+
+// ── fetch helpers ──────────────────────────────────────────────────────────
+async function api(path) {
+  const r = await fetch(`${origin}${path}`);
+  if (!r.ok) throw new Error(`${r.status}`);
+  return r.json();
+}
+
+// ── render providers ───────────────────────────────────────────────────────
+function renderProviders(data) {
+  const el = document.getElementById('providers');
+  const provs = data.providers || {};
+  if (!Object.keys(provs).length) {
+    el.innerHTML = '<div class="empty">No providers loaded.</div>';
+    return;
+  }
+  el.innerHTML = Object.entries(provs).map(([id, p]) => {
+    const ready = p.key_present || !p.requires_key;
+    const cls   = ready ? 'ready' : 'nokey';
+    const dot   = ready
+      ? (p.requires_key ? '<span class="dot-green">✓ keyed</span>' : '<span class="dot-green">✓ free</span>')
+      : '<span class="dot-yellow">○ no key</span>';
+    return `<div class="prov-card ${cls}">
+      <div class="prov-name">${p.label || id}</div>
+      <div class="prov-kind">${p.kind || 'chat'}</div>
+      <div class="prov-key">${dot}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── backend apps (proxied Python/Flask backends) ───────────────────────────
+const BACKEND_APPS = [
+  {
+    name: 'Char Card Editor',
+    url:  '/charcard/',
+    desc: 'PNG² chara_card_v2 viewer + editor · exports aichat roles',
+    check: '/charcard/',
+    hint: 'api-proxy start',
+  },
+];
+
+async function checkBackend(app) {
+  try {
+    const r = await fetch(`${origin}${app.check}`,
+      { signal: AbortSignal.timeout(3000) });
+    return r.status < 500;
+  } catch { return false; }
+}
+
+async function renderBackendApps() {
+  const el = document.getElementById('backend-apps');
+  const results = await Promise.all(BACKEND_APPS.map(async a => ({
+    ...a, alive: await checkBackend(a)
+  })));
+  el.innerHTML = results.map(a => {
+    const dot  = a.alive
+      ? '<span class="dot-green">● live</span>'
+      : '<span class="dot-yellow">○ backend offline</span>';
+    const note = a.alive ? '' :
+      `<div class="app-path" style="color:var(--yellow)">run: ${a.hint}</div>`;
+    return `<div class="app-card">
+      <div class="app-name">${a.name}</div>
+      <div class="app-url">${a.url}</div>
+      <div class="app-path">${a.desc}</div>
+      <div class="card-status">${dot} · proxied backend</div>
+      ${note}
+      <a class="open-btn" href="${origin}${a.url}" target="_blank">Open ↗</a>
+    </div>`;
+  }).join('');
+}
+
+// ── render apps ────────────────────────────────────────────────────────────
+function renderApps(data) {
+  const el = document.getElementById('apps');
+  const apps = (data.apps || []).filter(a => a.name !== 'manager');
+  if (!apps.length) {
+    el.innerHTML = '<div class="empty">No apps yet — wire one below.</div>';
+    return;
+  }
+  el.innerHTML = apps.map(a => {
+    const status = a.has_index
+      ? '<span class="dot-green">● live</span>'
+      : '<span class="dot-yellow">● no index.html</span>';
+    const fullUrl = `${origin}${a.url}`;
+    return `<div class="app-card">
+      <div class="app-name">${a.name}</div>
+      <div class="app-url">${a.url}</div>
+      <div class="app-path">${a.path}</div>
+      <div class="card-status">${status}${a.symlink ? ' · symlink' : ''}</div>
+      <a class="open-btn" href="${fullUrl}" target="_blank">Open ↗</a>
+    </div>`;
+  }).join('');
+}
+
+// ── refresh all ────────────────────────────────────────────────────────────
+async function refresh() {
+  const badge = document.getElementById('proxy-badge');
+  badge.className = 'badge loading';
+  badge.textContent = '… connecting';
+
+  try {
+    const [health, provData, appData] = await Promise.all([
+      api('/api/health'),
+      api('/api/providers'),
+      api('/api/apps'),
+    ]);
+
+    badge.className = 'badge live';
+    badge.textContent = '● LIVE';
+
+    renderProviders(provData);
+    renderApps(appData);
+    renderBackendApps();
+  } catch (e) {
+    badge.className = 'badge down';
+    badge.textContent = '○ OFFLINE';
+    document.getElementById('providers').innerHTML =
+      '<div class="empty">Proxy offline — run <code>api-proxy start</code></div>';
+    document.getElementById('apps').innerHTML =
+      '<div class="empty">—</div>';
+    renderBackendApps();
+  }
+}
+
+// ── wire a new app ─────────────────────────────────────────────────────────
+async function wireApp() {
+  const path = document.getElementById('wire-path').value.trim();
+  const name = document.getElementById('wire-name').value.trim();
+  const btn  = document.getElementById('wire-btn');
+  const con  = document.getElementById('wire-console');
+
+  if (!path) { alert('Enter an absolute path to the app directory.'); return; }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Wiring…';
+  con.className = 'console visible';
+  con.textContent = `$ nexus-proxy-wire ${path}${name ? ' ' + name : ''}\n\n`;
+
+  try {
+    const r = await fetch(`${origin}/api/wire`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, name }),
+    });
+    const data = await r.json();
+
+    if (data.error && !data.output) {
+      con.textContent += `\n[error] ${data.error}`;
+    } else {
+      // Strip ANSI colour codes for clean display
+      const clean = (data.output || '').replace(/\x1b\[[0-9;]*m/g, '');
+      con.textContent += clean;
+    }
+
+    if (data.success) {
+      con.textContent += `\n✓ Wired! Refreshing app list…`;
+      setTimeout(() => refresh(), 800);
+    } else {
+      con.textContent += `\n✗ Wire failed (exit ${data.returncode})`;
+    }
+  } catch (e) {
+    con.textContent += `\n[error] ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⚙ Wire';
+    con.scrollTop = con.scrollHeight;
+  }
+}
+
+// ── enter key in inputs ────────────────────────────────────────────────────
+document.getElementById('wire-path').addEventListener('keydown', e => {
+  if (e.key === 'Enter') wireApp();
+});
+
+// ── auto-refresh every 30s ─────────────────────────────────────────────────
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>

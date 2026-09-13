@@ -1,0 +1,152 @@
+"""
+NeXuS Command Center - Configuration
+Central configuration for the network control API
+"""
+
+from pathlib import Path
+from pydantic_settings import BaseSettings
+from typing import List, Dict, Optional
+
+
+class Settings(BaseSettings):
+    """Application settings with environment variable support"""
+
+    # Server Configuration
+    host: str = "0.0.0.0"
+    api_port: int = 8801
+    ui_port: int = 8800
+    debug: bool = False
+
+    # Data Paths (local development)
+    data_dir: Path = Path("/home/user/claude/configs/nexus-stack")
+    rules_file: str = "bypass-rules.json"
+
+    # Podman/Docker Configuration
+    container_runtime: str = "podman"  # or "docker"
+    socket_path: str = "/run/user/1000/podman/podman.sock"  # Rootless podman
+
+    # Network Definitions (using localhost for host-network mode)
+    # Container names match actual podman containers: nexus-tor, nexus-i2p, etc.
+    networks: Dict[str, dict] = {
+        "tor": {
+            "name": "Tor",
+            "icon": "🧅",
+            "color": "#7B68EE",
+            "containers": ["nexus-tor-*", "nexus-tor"],  # Multi-instance pattern + fallback
+            "multi_instance": True,  # Flag for multi-instance detection
+            "health_check": {
+                "type": "socks",
+                "host": "127.0.0.1",
+                "port": 9050,
+                "test_url": "https://check.torproject.org/api/ip"
+            },
+            "config": {
+                "circuits": 6,  # TORS env var
+                "heads": 2      # HEADS env var (Privoxy instances)
+            }
+        },
+        "i2p": {
+            "name": "I2P",
+            "icon": "🟣",
+            "color": "#9932CC",
+            "containers": ["nexus-i2p"],
+            "health_check": {
+                "type": "http",
+                "host": "127.0.0.1",
+                "port": 7070,
+                "path": "/"
+            }
+        },
+        "yggdrasil": {
+            "name": "Yggdrasil",
+            "icon": "🟢",
+            "color": "#32CD32",
+            "containers": ["nexus-yggdrasil"],
+            "health_check": {
+                "type": "tcp",
+                "host": "127.0.0.1",
+                "port": 9001
+            }
+        },
+        "reticulum": {
+            "name": "Reticulum",
+            "icon": "🔴",
+            "color": "#FF4500",
+            "containers": ["nexus-reticulum"],
+            "health_check": {
+                "type": "tcp",
+                "host": "127.0.0.1",
+                "port": 4242
+            }
+        },
+        "ipfs": {
+            "name": "IPFS",
+            "icon": "📦",
+            "color": "#65C2CB",
+            "containers": ["nexus-ipfs"],
+            "health_check": {
+                "type": "http",
+                "host": "127.0.0.1",
+                "port": 5001,
+                "path": "/api/v0/id"
+            }
+        },
+        "snowflake": {
+            "name": "Snowflake",
+            "icon": "❄️",
+            "color": "#87CEEB",
+            "containers": ["nexus-snowflake"],
+            "health_check": {
+                "type": "tcp",
+                "host": "127.0.0.1",
+                "port": 9999
+            }
+        },
+        "batman": {
+            "name": "BATMAN-adv",
+            "icon": "🦇",
+            "color": "#2F4F4F",
+            "containers": [],
+            "health_check": {
+                "type": "interface",
+                "interface": "bat0"
+            }
+        },
+        "direct": {
+            "name": "Direct",
+            "icon": "🔓",
+            "color": "#FFD700",
+            "containers": [],
+            "health_check": {
+                "type": "none"
+            }
+        }
+    }
+
+    # HAProxy Configuration (use localhost for host access)
+    haproxy_stats_url: str = "http://127.0.0.1:8404/stats"
+    haproxy_socket: str = "/var/run/haproxy/admin.sock"
+    haproxy_config_path: str = "/etc/haproxy/haproxy.cfg"
+
+    # Health Check Intervals
+    health_check_interval: int = 30  # seconds
+    traffic_poll_interval: float = 1.0  # seconds
+
+    # WebSocket Configuration
+    ws_heartbeat: int = 30
+    ws_max_connections: int = 100
+
+    class Config:
+        env_prefix = "NEXUS_"
+        env_file = ".env"
+
+
+# Global settings instance
+settings = Settings()
+
+
+# Network container mapping for quick lookup
+CONTAINER_TO_NETWORK = {}
+for net_id, net_config in settings.networks.items():
+    for container in net_config.get("containers", []):
+        CONTAINER_TO_NETWORK[container] = net_id

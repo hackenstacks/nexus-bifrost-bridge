@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeXuS Network Command Center</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌀</text></svg>">
+    <link rel="stylesheet" href="css/nexus.css">
+    <style>
+        /* ── Tab Navigation ───────────────────────────────────────── */
+        .nav-tabs {
+            display: flex;
+            gap: 2px;
+            align-items: center;
+            flex: 1;
+            padding: 0 var(--spacing-lg);
+        }
+        .nav-tab {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            white-space: nowrap;
+            text-decoration: none;
+        }
+        .nav-tab:hover { color: var(--text-primary); background: var(--bg-hover); border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+        .nav-tab.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+        .nav-tab img { width: 15px; height: 15px; filter: invert(60%); }
+        .nav-tab.active img { filter: invert(60%) sepia(1) saturate(3) hue-rotate(190deg); }
+        .nav-tab:hover img { filter: invert(80%); }
+
+        /* ── Tab Panels ───────────────────────────────────────────── */
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* ── Icon helpers ─────────────────────────────────────────── */
+        .panel-icon { width: 16px; height: 16px; filter: invert(55%); vertical-align: middle; margin-right: 6px; }
+        .btn-icon-img { width: 14px; height: 14px; filter: invert(60%); }
+        .status-dot-img { width: 10px; height: 10px; }
+
+        /* ── Quick Actions grid ───────────────────────────────────── */
+        .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-sm); }
+        .action-grid .btn { justify-content: center; }
+
+        /* ── Network map dots ─────────────────────────────────────── */
+        .netmap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: var(--spacing-sm); }
+        .netmap-card { background: var(--bg-tertiary); border-radius: var(--radius-md); padding: var(--spacing-sm) var(--spacing-md); text-align: center; }
+        .netmap-card .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+        .dot-online  { background: var(--accent-success); box-shadow: 0 0 6px var(--accent-success); }
+        .dot-offline { background: var(--accent-danger); }
+        .dot-unknown { background: var(--accent-warning); animation: pulse 2s infinite; }
+
+        /* ── Log styles ───────────────────────────────────────────── */
+        #logs { height: 300px; overflow-y: auto; background: var(--bg-primary); padding: var(--spacing-sm); border-radius: var(--radius-sm); border: 1px solid var(--border-primary); font-family: 'SF Mono', monospace; font-size: 0.75rem; }
+
+        /* ── Status badge small ───────────────────────────────────── */
+        .btn-sm { padding: 3px 10px; font-size: 0.8rem; }
+
+        /* ── Live activity log ────────────────────────────────────── */
+        #live-activity { height: 120px; overflow-y: auto; background: var(--bg-primary); padding: var(--spacing-sm); border-radius: var(--radius-sm); border: 1px solid var(--border-primary); font-family: 'SF Mono', monospace; font-size: 0.75rem; }
+        .act-line { padding: 2px 0; border-bottom: 1px solid var(--border-secondary); }
+        .act-time { color: var(--text-muted); margin-right: 8px; }
+        .act-success { color: var(--accent-success); }
+        .act-error   { color: var(--accent-danger); }
+        .act-info    { color: var(--accent-primary); }
+    </style>
+</head>
+<body>
+<div class="app-container">
+
+    <!-- ── Header ──────────────────────────────────────────────────── -->
+    <header class="app-header">
+        <div class="app-logo">
+            <span class="icon">🌀</span>
+            <span>NeXuS NCC</span>
+        </div>
+
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-tab="dashboard"  onclick="showTab('dashboard')">
+                <img src="assets/icons/monitor.svg" alt=""> Dashboard
+            </button>
+            <button class="nav-tab" data-tab="services" onclick="showTab('services')">
+                <img src="assets/icons/server.svg" alt=""> Services
+            </button>
+            <button class="nav-tab" data-tab="hosting"  onclick="showTab('hosting')">
+                <img src="assets/icons/globe.svg" alt=""> Hosting
+            </button>
+            <button class="nav-tab" data-tab="gateway"  onclick="showTab('gateway')">
+                <img src="assets/icons/shield.svg" alt=""> Gateway
+            </button>
+            <button class="nav-tab" data-tab="traffic"  onclick="showTab('traffic')">
+                <img src="assets/icons/activity.svg" alt=""> Traffic
+            </button>
+            <button class="nav-tab" data-tab="network"  onclick="showTab('network')">
+                <img src="assets/icons/chart-network.svg" alt=""> Network
+            </button>
+        </nav>
+
+        <div class="header-actions">
+            <span id="connection-status" class="status-badge status-unknown">
+                <span class="pulse">●</span> Connecting
+            </span>
+            <button class="btn btn-secondary" id="health-check-btn">
+                <img class="btn-icon-img" src="assets/icons/scan.svg" alt=""> Health
+            </button>
+            <button class="btn btn-secondary" id="refresh-btn">
+                <img class="btn-icon-img" src="assets/icons/refresh-cw.svg" alt=""> Refresh
+            </button>
+        </div>
+    </header>
+
+    <!-- ── Main ────────────────────────────────────────────────────── -->
+    <main class="main-content">
+
+        <!-- ════════════════════════════════════════════════════════
+             TAB: DASHBOARD
+             ════════════════════════════════════════════════════════ -->
+        <div id="tab-dashboard" class="tab-panel active">
+            <!-- Stats Row -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-bytes-in">0 B</div>
+                    <div class="stat-label">Traffic In</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-bytes-out">0 B</div>
+                    <div class="stat-label">Traffic Out</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-connections">0</div>
+                    <div class="stat-label">Connections</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-uptime">—</div>
+                    <div class="stat-label">Uptime</div>
+                </div>
+            </div>
+
+            <div class="dashboard-grid">
+                <!-- Core Networks -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/chart-network.svg" alt="">
+                            Core Networks
+                        </h2>
+                        <span class="status-badge status-unknown" id="core-status">Checking</span>
+                    </div>
+                    <div class="card-body">
+                        <table class="network-table">
+                            <thead>
+                                <tr><th>Network</th><th>Status</th><th>Latency</th><th>Traffic</th><th>Actions</th></tr>
+                            </thead>
+                            <tbody id="network-table-body">
+                                <tr><td colspan="5" class="loading"><div class="spinner"></div> Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/zap.svg" alt="">
+                            Quick Actions
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="action-grid">
+                            <button class="btn btn-primary" onclick="startAll()">
+                                <img class="btn-icon-img" src="assets/icons/play.svg" alt=""> Start All
+                            </button>
+                            <button class="btn btn-danger" onclick="stopAll()">
+                                <img class="btn-icon-img" src="assets/icons/square.svg" alt=""> Stop All
+                            </button>
+                            <button class="btn btn-secondary" onclick="restartAll()">
+                                <img class="btn-icon-img" src="assets/icons/refresh-cw.svg" alt=""> Restart All
+                            </button>
+                            <button class="btn btn-secondary" onclick="startGateway()">
+                                <img class="btn-icon-img" src="assets/icons/shield.svg" alt=""> Gateway
+                            </button>
+                            <button class="btn btn-secondary" onclick="runDoctor()" style="grid-column:span 2">
+                                <img class="btn-icon-img" src="assets/icons/scan.svg" alt=""> Run Network Doctor
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Direct Connect (Bypass Rules) -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/lock-open.svg" alt="">
+                            Direct Connect
+                        </h2>
+                        <span class="badge" id="rule-count">0 rules</span>
+                    </div>
+                    <div class="card-body">
+                        <ul class="bypass-rules-list" id="bypass-rules-list">
+                            <li class="loading"><div class="spinner"></div> Loading...</li>
+                        </ul>
+                    </div>
+                    <div class="quick-add">
+                        <input type="text" id="new-rule-pattern" placeholder="Domain or pattern..." autocomplete="off">
+                        <select id="new-rule-type">
+                            <option value="domain">Domain</option>
+                            <option value="wildcard">Wildcard</option>
+                            <option value="cidr">CIDR</option>
+                        </select>
+                        <button id="add-rule-btn" class="btn btn-primary">+ Add</button>
+                    </div>
+                </div>
+
+                <!-- Node Info -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/cpu.svg" alt="">
+                            Node Info
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="config-row">
+                            <span class="config-label">Device IP</span>
+                            <span class="config-value" id="device-ip">—</span>
+                        </div>
+                        <div class="config-row">
+                            <span class="config-label">Gateway IP</span>
+                            <span class="config-value" id="gateway-ip">—</span>
+                        </div>
+                        <div class="config-row">
+                            <span class="config-label">Routing Mode</span>
+                            <span class="config-value" id="routing-mode">Tor Anonymization</span>
+                        </div>
+                        <div class="config-row">
+                            <span class="config-label">DNS Status</span>
+                            <span class="config-value" id="dns-status">Local (no leak)</span>
+                        </div>
+                        <div class="config-row">
+                            <span class="config-label">Hostname</span>
+                            <span class="config-value" id="node-hostname">—</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Activity -->
+                <div class="card" style="grid-column: span 2">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/radio.svg" alt="">
+                            Live Activity
+                            <span class="pulse" style="color:var(--accent-success); margin-left:6px;">●</span>
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="live-activity"></div>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /tab-dashboard -->
+
+        <!-- ════════════════════════════════════════════════════════
+             TAB: SERVICES
+             ════════════════════════════════════════════════════════ -->
+        <div id="tab-services" class="tab-panel">
+            <div class="dashboard-grid">
+                <!-- Darknet Services -->
+                <div class="card" style="grid-column: span 2">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/layers.svg" alt="">
+                            Darknet Services
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <table class="network-table">
+                            <thead>
+                                <tr><th>Service</th><th>Status</th><th>Port</th><th>Network</th><th>Action</th></tr>
+                            </thead>
+                            <tbody id="services-list">
+                                <tr><td colspan="5" class="loading"><div class="spinner"></div> Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Network Doctor -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/scan.svg" alt="">
+                            Network Doctor
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="doctor-results" style="font-size:0.875rem; min-height:80px;">
+                            <span style="color:var(--text-muted)">Click Run Scan to diagnose...</span>
+                        </div>
+                        <button onclick="runDoctor()" class="btn btn-secondary" style="width:100%; margin-top:var(--spacing-md)">
+                            <img class="btn-icon-img" src="assets/icons/scan-eye.svg" alt=""> Run Scan
+                        </button>
+                    </div>
+                </div>
+
+                <!-- OpenSnitch Firewall -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/shield-alert.svg" alt="">
+                            OpenSnitch Firewall
+                        </h2>
+                        <div style="display:flex; gap:var(--spacing-sm); align-items:center">
+                            <span id="opensnitch-status-badge" class="status-badge status-unknown">UNKNOWN</span>
+                            <button id="opensnitch-toggle-btn" onclick="toggleOpenSnitch()" class="btn btn-secondary btn-sm">Start</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="opensnitch-controls" style="display:none">
+                            <div class="stats-row" style="margin-bottom:var(--spacing-md)">
+                                <div class="stat-card" style="padding:var(--spacing-sm)">
+                                    <div class="stat-value" id="opensnitch-rules-count" style="font-size:1.5rem">0</div>
+                                    <div class="stat-label">Active Rules</div>
+                                </div>
+                                <div class="stat-card" style="padding:var(--spacing-sm)">
+                                    <div class="stat-value" id="opensnitch-hits" style="font-size:1.5rem">0</div>
+                                    <div class="stat-label">Blocked Hits</div>
+                                </div>
+                            </div>
+                            <table class="network-table">
+                                <thead><tr><th>Application</th><th>Destination</th><th>Action</th><th>Time</th></tr></thead>
+                                <tbody id="opensnitch-hits-list"></tbody>
+                            </table>
+                        </div>
+                        <div id="opensnitch-placeholder" style="text-align:center; padding:var(--spacing-lg); color:var(--text-muted)">
+                            <img src="assets/icons/shield-alert.svg" style="width:32px;height:32px;filter:invert(30%);margin-bottom:8px"><br>
+                            OpenSnitch not detected.<br>
+                            <code style="font-size:0.75rem">rc-service opensnitchd start</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /tab-services -->
+
+        <!-- ════════════════════════════════════════════════════════
+             TAB: HOSTING
+             ════════════════════════════════════════════════════════ -->
+        <div id="tab-hosting" class="tab-panel">
+            <div class="dashboard-grid">
+                <!-- Darknet Hosting -->
+                <div class="card" style="grid-column: span 2">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/globe.svg" alt="">
+                            Darknet Hosting
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="quick-add" style="margin-bottom:var(--spacing-md)">
+                            <input id="host-name" placeholder="Service name (e.g. blog)" style="flex:2">
+                            <select id="host-net">
+                                <option value="tor">Tor (.onion)</option>
+                                <option value="i2p">I2P (.b32.i2p)</option>
+                                <option value="yggdrasil">Yggdrasil (IPv6)</option>
+                                <option value="reticulum">Reticulum</option>
+                            </select>
+                            <input id="host-port" type="number" placeholder="Port" value="80" style="width:80px">
+                            <button onclick="exposeService()" class="btn btn-primary">
+                                <img class="btn-icon-img" src="assets/icons/globe.svg" alt=""> Expose
+                            </button>
+                        </div>
+                        <table class="network-table">
+                            <thead><tr><th>Name</th><th>Network</th><th>Port</th><th>Dark Address</th><th>Action</th></tr></thead>
+                            <tbody id="hosting-list">
+                                <tr><td colspan="5" style="text-align:center;color:var(--text-muted)">No services exposed</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- File Share -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/share.svg" alt="">
+                            File Share
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="upload-area" style="border:2px dashed var(--border-primary); border-radius:var(--radius-md); padding:var(--spacing-lg); text-align:center; cursor:pointer" onclick="document.getElementById('upload-input').click()">
+                            <img src="assets/icons/share.svg" style="width:32px;height:32px;filter:invert(40%);margin-bottom:8px"><br>
+                            <span style="color:var(--text-secondary)">Drag & drop or click to upload</span>
+                            <input type="file" id="upload-input" style="display:none" multiple>
+                        </div>
+                        <div id="file-list" style="margin-top:var(--spacing-md); font-size:0.8rem; color:var(--text-muted)">No files shared yet</div>
+                        <pre style="background:var(--bg-primary); padding:var(--spacing-sm); border-radius:var(--radius-sm); font-size:0.7rem; margin-top:var(--spacing-md); overflow-x:auto">curl -X POST "http://127.0.0.1:5001/api/v0/add" -F "file=@yourfile"</pre>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /tab-hosting -->
+
+        <!-- ════════════════════════════════════════════════════════
+             TAB: GATEWAY
+             ════════════════════════════════════════════════════════ -->
+        <div id="tab-gateway" class="tab-panel">
+            <div class="dashboard-grid">
+                <!-- Tor Circuits & Identity -->
+                <div class="card" style="grid-column: span 2">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/refresh-cw.svg" alt="">
+                            Tor Circuits & Identity
+                        </h2>
+                        <div style="display:flex; gap:var(--spacing-sm); align-items:center">
+                            <span style="font-size:0.8rem; color:var(--text-secondary)">Exit IP: <span id="tor-exit-ip" style="color:var(--accent-success); font-weight:bold">—</span></span>
+                            <button id="newnym-btn" onclick="requestNewIdentity()" class="btn btn-secondary btn-sm">
+                                <img class="btn-icon-img" src="assets/icons/key.svg" alt=""> New Identity
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <table class="network-table">
+                            <thead><tr><th style="width:60px">ID</th><th style="width:100px">Status</th><th>Path (hops)</th><th style="width:120px">Purpose</th></tr></thead>
+                            <tbody id="circuits-list">
+                                <tr><td colspan="4" style="text-align:center;color:var(--text-muted)">Loading circuits...</td></tr>
+                            </tbody>
+                        </table>
+                        <div id="tor-error" style="color:var(--accent-danger);font-size:0.8rem;margin-top:var(--spacing-sm);display:none"></div>
+                    </div>
+                </div>
+
+                <!-- Configuration -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/settings.svg" alt="">
+                            Configuration
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="config-section">
+                            <h3>🧅 Tor</h3>
+                            <div class="config-row">
+                                <span class="config-label">Active Instances</span>
+                                <span class="config-value">
+                                    <select id="tor-instances"><option value="6" selected>6 nodes</option><option value="4">4 nodes</option><option value="3">3 nodes</option></select>
+                                </span>
+                            </div>
+                            <div class="config-row">
+                                <span class="config-label">Circuit Rotation</span>
+                                <span class="config-value">
+                                    <select id="circuit-rotation"><option value="5">5 min</option><option value="10" selected>10 min</option><option value="15">15 min</option><option value="30">30 min</option></select>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="config-section">
+                            <h3><img class="panel-icon" src="assets/icons/router.svg" alt=""> Default Routing</h3>
+                            <div class="config-row">
+                                <span class="config-label">Default Network</span>
+                                <span class="config-value">
+                                    <select id="default-network">
+                                        <option value="tor" selected>🧅 Tor</option>
+                                        <option value="i2p">🟣 I2P</option>
+                                        <option value="yggdrasil">🟢 Yggdrasil</option>
+                                        <option value="direct">🔓 Direct</option>
+                                    </select>
+                                </span>
+                            </div>
+                            <div class="config-row">
+                                <span class="config-label">Auto-Failover</span>
+                                <span class="config-value"><input type="checkbox" class="rule-toggle" id="auto-failover" checked></span>
+                            </div>
+                        </div>
+                        <div class="config-section">
+                            <h3><img class="panel-icon" src="assets/icons/layers.svg" alt=""> Failover Order</h3>
+                            <ol id="failover-order" style="margin-left:20px; color:var(--text-secondary); font-size:0.875rem">
+                                <li>🧅 Tor</li><li>🟣 I2P</li><li>🟢 Yggdrasil</li>
+                                <li>🔴 Reticulum</li><li>🦇 BATMAN-adv</li><li>🔓 Direct</li>
+                            </ol>
+                        </div>
+                        <button class="btn btn-primary" style="width:100%; margin-top:var(--spacing-md)">
+                            <img class="btn-icon-img" src="assets/icons/settings.svg" alt=""> Apply Changes
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Jurisdiction Policy -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/anchor.svg" alt="">
+                            Jurisdiction Policy
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <select id="jurisdiction-select" style="width:100%; padding:var(--spacing-sm); background:var(--bg-tertiary); border:1px solid var(--border-primary); color:var(--text-primary); border-radius:var(--radius-sm); margin-bottom:var(--spacing-sm)">
+                            <option value="world">World (No Restrictions)</option>
+                            <option value="no-5-eyes">No 5-Eyes</option>
+                            <option value="no-9-eyes">No 9-Eyes</option>
+                            <option value="no-14-eyes">No 14-Eyes</option>
+                        </select>
+                        <p id="policy-status" style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:var(--spacing-sm)"></p>
+                        <button onclick="applyJurisdiction()" class="btn btn-primary" style="width:100%">
+                            <img class="btn-icon-img" src="assets/icons/anchor.svg" alt=""> Apply Policy
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Proxy Setup -->
+                <div class="card" style="grid-column: span 2">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/router.svg" alt="">
+                            Proxy Setup
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="config-section">
+                            <h3>Tor SOCKS5 (Recommended)</h3>
+                            <div class="config-row">
+                                <span class="config-label">127.0.0.1 : 9050</span>
+                                <div class="action-buttons">
+                                    <button class="btn btn-secondary btn-sm" onclick="copy('127.0.0.1')">Copy IP</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="copy('9050')">Copy Port</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="config-section">
+                            <h3>Privoxy HTTP (Auto-routes .onion / .i2p)</h3>
+                            <div class="config-row">
+                                <span class="config-label">127.0.0.1 : 8118</span>
+                                <div class="action-buttons">
+                                    <button class="btn btn-secondary btn-sm" onclick="copy('127.0.0.1')">Copy IP</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="copy('8118')">Copy Port</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="config-section">
+                            <h3>Quick Usage</h3>
+                            <pre style="background:var(--bg-primary); padding:var(--spacing-sm); border-radius:var(--radius-sm); font-size:0.75rem; overflow-x:auto">curl --socks5-hostname 127.0.0.1:9050 https://check.torproject.org/</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Censorship Guide -->
+                <div class="card" style="grid-column: span 2">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/compass.svg" alt="">
+                            Censorship Guide
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <details style="margin-bottom:var(--spacing-sm)">
+                            <summary style="cursor:pointer; padding:var(--spacing-sm); background:var(--bg-tertiary); border-radius:var(--radius-sm)">1. Tor Bridges (when Tor is blocked)</summary>
+                            <div style="padding:var(--spacing-sm); font-size:0.85rem">
+                                <p>Use bridges — unlisted Tor entry nodes — when Tor is blocked in your region.</p>
+                                <pre style="background:var(--bg-primary); padding:var(--spacing-sm); margin-top:8px; font-size:0.75rem">https://bridges.torproject.org</pre>
+                            </div>
+                        </details>
+                        <details style="margin-bottom:var(--spacing-sm)">
+                            <summary style="cursor:pointer; padding:var(--spacing-sm); background:var(--bg-tertiary); border-radius:var(--radius-sm)">2. V2Ray / Xray (Advanced)</summary>
+                            <div style="padding:var(--spacing-sm); font-size:0.85rem">
+                                <p>VMess/VLESS protocol disguises Tor traffic as normal HTTPS.</p>
+                            </div>
+                        </details>
+                        <details>
+                            <summary style="cursor:pointer; padding:var(--spacing-sm); background:var(--bg-tertiary); border-radius:var(--radius-sm)">3. DNS over HTTPS</summary>
+                            <div style="padding:var(--spacing-sm); font-size:0.85rem">
+                                <p>Bypasses DNS-level censorship. NeXuS runs Unbound locally — already protected.</p>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /tab-gateway -->
+
+        <!-- ════════════════════════════════════════════════════════
+             TAB: TRAFFIC
+             ════════════════════════════════════════════════════════ -->
+        <div id="tab-traffic" class="tab-panel">
+            <div class="dashboard-grid">
+                <!-- Live Traffic Monitor -->
+                <div class="card" style="grid-column: span 2">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/eye.svg" alt="">
+                            Live Traffic
+                            <span class="pulse" style="color:var(--accent-success); margin-left:6px">●</span>
+                        </h2>
+                        <button class="btn-icon" id="pause-traffic" data-tooltip="Pause">
+                            <img class="btn-icon-img" src="assets/icons/square.svg" alt="">
+                        </button>
+                    </div>
+                    <div class="card-body traffic-monitor">
+                        <div class="traffic-log" id="traffic-log">
+                            <div class="traffic-entry">
+                                <span class="traffic-time">—</span>
+                                <span class="traffic-source">—</span>
+                                <span class="traffic-dest">Waiting for traffic...</span>
+                                <span class="traffic-network">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Unified System Log -->
+                <div class="card" style="grid-column: span 2">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/file-text.svg" alt="">
+                            Unified System Log
+                            <span id="log-count" style="color:var(--text-muted); font-size:0.75rem; font-weight:normal; margin-left:6px"></span>
+                        </h2>
+                        <div style="display:flex; gap:var(--spacing-sm)">
+                            <input id="log-filter" placeholder="Filter..." style="padding:2px 8px; background:var(--bg-tertiary); border:1px solid var(--border-primary); color:var(--text-primary); border-radius:var(--radius-sm); font-size:0.75rem">
+                            <label style="font-size:0.75rem; color:var(--text-secondary); display:flex; align-items:center; gap:4px">
+                                <input type="checkbox" id="log-follow" checked> Follow
+                            </label>
+                            <button onclick="clearLogView()" class="btn-icon" title="Clear">
+                                <img class="btn-icon-img" src="assets/icons/wrench.svg" alt="">
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="logs"></div>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /tab-traffic -->
+
+        <!-- ════════════════════════════════════════════════════════
+             TAB: NETWORK
+             ════════════════════════════════════════════════════════ -->
+        <div id="tab-network" class="tab-panel">
+            <div class="dashboard-grid">
+                <!-- Network Map -->
+                <div class="card" style="grid-column: span 2">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/map.svg" alt="">
+                            Network Map
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="netmap-grid" id="netmap-grid">
+                            <div class="netmap-card"><span class="dot dot-unknown" id="dot-tor"></span>Tor<div id="status-tor" style="font-size:0.7rem;color:var(--text-muted)">checking...</div></div>
+                            <div class="netmap-card"><span class="dot dot-unknown" id="dot-i2p"></span>I2P<div id="status-i2p" style="font-size:0.7rem;color:var(--text-muted)">checking...</div></div>
+                            <div class="netmap-card"><span class="dot dot-unknown" id="dot-privoxy"></span>Privoxy<div id="status-privoxy" style="font-size:0.7rem;color:var(--text-muted)">checking...</div></div>
+                            <div class="netmap-card"><span class="dot dot-unknown" id="dot-ipfs"></span>IPFS<div id="status-ipfs" style="font-size:0.7rem;color:var(--text-muted)">checking...</div></div>
+                            <div class="netmap-card"><span class="dot dot-unknown" id="dot-ygg"></span>Yggdrasil<div id="status-ygg" style="font-size:0.7rem;color:var(--text-muted)">checking...</div></div>
+                            <div class="netmap-card"><span class="dot dot-unknown" id="dot-haproxy"></span>HAProxy<div id="status-haproxy" style="font-size:0.7rem;color:var(--text-muted)">checking...</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Onion Services -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/globe.svg" alt="">
+                            Onion Services
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="config-row">
+                            <span class="config-label">txt-blogger</span>
+                            <span class="config-value" id="onion-txt" style="font-family:monospace; font-size:0.8rem; color:var(--accent-primary)">loading...</span>
+                        </div>
+                        <div class="config-row">
+                            <span class="config-label">Gemini</span>
+                            <span class="config-value" id="onion-gemini" style="font-family:monospace; font-size:0.8rem; color:var(--accent-primary)">loading...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Architecture -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <img class="panel-icon" src="assets/icons/layers.svg" alt="">
+                            Architecture
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <pre style="background:var(--bg-primary); padding:var(--spacing-sm); border-radius:var(--radius-sm); font-size:0.75rem; font-family:monospace; overflow-x:auto">This device
+    ↓ (local)
+NeXuS Node (127.0.0.1)
+    ├── Tor SOCKS5  :9050  → clearnet anon
+    ├── I2P HTTP    :4444  → .i2p only
+    ├── Privoxy     :8118  → .onion/.i2p auto
+    ├── IPFS        :5001  → distributed storage
+    ├── Yggdrasil   :9001  → encrypted mesh
+    └── HAProxy     :8404  → multi-circuit LB</pre>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /tab-network -->
+
+    </main>
+
+    <!-- ── Footer ───────────────────────────────────────────────────── -->
+    <footer style="padding:var(--spacing-md); text-align:center; color:var(--text-muted); font-size:0.75rem; border-top:1px solid var(--border-primary)">
+        🌀 NeXuS Network Command Center v2.0 &nbsp;|&nbsp;
+        <a href="/api">API</a> &nbsp;·&nbsp;
+        <a href="/docs">Docs</a> &nbsp;·&nbsp;
+        <a href="/api/health">Health</a>
+    </footer>
+
+</div><!-- /app-container -->
+
+<script src="js/app.js"></script>
+</body>
+</html>

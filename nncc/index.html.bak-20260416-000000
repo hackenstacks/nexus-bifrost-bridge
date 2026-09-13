@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌀 NeXuS Command Center</title>
+
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌀</text></svg>">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/nexus.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="app-logo">
+                <span class="icon">🌀</span>
+                <span>NeXuS Command Center</span>
+            </div>
+
+            <div class="header-actions">
+                <span id="connection-status" class="status-indicator" title="Connection Status">
+                    <span class="pulse">●</span>
+                </span>
+                <button id="health-check-btn" class="btn btn-secondary">
+                    🔍 Health Check
+                </button>
+                <button id="refresh-btn" class="btn btn-secondary">
+                    🔄 Refresh
+                </button>
+                <a href="/docs" class="btn btn-secondary" target="_blank">
+                    📚 API Docs
+                </a>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Stats Row -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-bytes-in">0 B</div>
+                    <div class="stat-label">Traffic In</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-bytes-out">0 B</div>
+                    <div class="stat-label">Traffic Out</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-connections">0</div>
+                    <div class="stat-label">Connections</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-uptime">—</div>
+                    <div class="stat-label">Uptime</div>
+                </div>
+            </div>
+
+            <!-- Dashboard Grid -->
+            <div class="dashboard-grid">
+                <!-- Network Status Panel -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            📊 Network Status
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <table class="network-table">
+                            <thead>
+                                <tr>
+                                    <th>Network</th>
+                                    <th>Status</th>
+                                    <th>Latency</th>
+                                    <th>Traffic</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="network-table-body">
+                                <tr>
+                                    <td colspan="5" class="loading">
+                                        <div class="spinner"></div>
+                                        Loading networks...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Bypass Rules Panel -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            🔓 Bypass Rules
+                        </h2>
+                        <span class="badge" id="rule-count">0 rules</span>
+                    </div>
+                    <div class="card-body">
+                        <ul class="bypass-rules-list" id="bypass-rules-list">
+                            <li class="loading">
+                                <div class="spinner"></div>
+                                Loading rules...
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="quick-add">
+                        <input type="text"
+                               id="new-rule-pattern"
+                               placeholder="Enter domain or pattern..."
+                               autocomplete="off">
+                        <select id="new-rule-type">
+                            <option value="domain">Domain</option>
+                            <option value="wildcard">Wildcard</option>
+                            <option value="cidr">CIDR</option>
+                        </select>
+                        <button id="add-rule-btn" class="btn btn-primary">
+                            + Add
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Traffic Monitor -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            📡 Live Traffic
+                            <span class="pulse" style="color: var(--accent-success);">●</span>
+                        </h2>
+                        <div>
+                            <button class="btn-icon" id="pause-traffic" data-tooltip="Pause">
+                                ⏸️
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body traffic-monitor">
+                        <div class="traffic-log" id="traffic-log">
+                            <div class="traffic-entry">
+                                <span class="traffic-time">—</span>
+                                <span class="traffic-source">—</span>
+                                <span class="traffic-dest">Waiting for traffic...</span>
+                                <span class="traffic-network">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuration Panel -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            ⚙️ Configuration
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <!-- Tor Configuration -->
+                        <div class="config-section">
+                            <h3>🧅 Tor Configuration</h3>
+                            <div class="config-row">
+                                <span class="config-label">Active Instances</span>
+                                <span class="config-value">
+                                    <select id="tor-instances">
+                                        <option value="6" selected>6 nodes</option>
+                                        <option value="4">4 nodes</option>
+                                        <option value="3">3 nodes</option>
+                                    </select>
+                                </span>
+                            </div>
+                            <div class="config-row">
+                                <span class="config-label">Circuit Rotation</span>
+                                <span class="config-value">
+                                    <select id="circuit-rotation">
+                                        <option value="5">Every 5 min</option>
+                                        <option value="10" selected>Every 10 min</option>
+                                        <option value="15">Every 15 min</option>
+                                        <option value="30">Every 30 min</option>
+                                    </select>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Default Routing -->
+                        <div class="config-section">
+                            <h3>📊 Default Routing</h3>
+                            <div class="config-row">
+                                <span class="config-label">Default Network</span>
+                                <span class="config-value">
+                                    <select id="default-network">
+                                        <option value="tor" selected>🧅 Tor</option>
+                                        <option value="i2p">🟣 I2P</option>
+                                        <option value="yggdrasil">🟢 Yggdrasil</option>
+                                        <option value="direct">🔓 Direct</option>
+                                    </select>
+                                </span>
+                            </div>
+                            <div class="config-row">
+                                <span class="config-label">Auto-Failover</span>
+                                <span class="config-value">
+                                    <input type="checkbox" class="rule-toggle" id="auto-failover" checked>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Failover Order -->
+                        <div class="config-section">
+                            <h3>🔄 Failover Order</h3>
+                            <div class="config-row" style="flex-direction: column; align-items: flex-start;">
+                                <ol id="failover-order" style="margin-left: 20px; color: var(--text-secondary);">
+                                    <li>🧅 Tor</li>
+                                    <li>🟣 I2P</li>
+                                    <li>🟢 Yggdrasil</li>
+                                    <li>🔴 Reticulum</li>
+                                    <li>🦇 BATMAN-adv</li>
+                                    <li>🔓 Direct</li>
+                                </ol>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary" style="width: 100%; margin-top: var(--spacing-md);">
+                            💾 Apply Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer style="padding: var(--spacing-md); text-align: center; color: var(--text-muted); font-size: 0.75rem;">
+            <p>🌀 NeXuS Command Center v1.0.0 | Unified Control Plane for Anonymity Networks</p>
+            <p>
+                <a href="/api">API</a> •
+                <a href="/docs">Documentation</a> •
+                <a href="/api/health">Health</a>
+            </p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/app.js"></script>
+</body>
+</html>

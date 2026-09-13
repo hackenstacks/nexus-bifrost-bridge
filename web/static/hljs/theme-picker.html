@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NeXuS :: Highlight Theme Picker</title>
+<script src="./highlight.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080b0f;--bg2:#0d1117;--bg3:#111820;
+  --border:#1a2230;--border2:#253040;
+  --green:#00e87a;--cyan:#00c8f0;--amber:#f0a000;
+  --dim:#3a5060;--dim2:#557080;--text:#b8ccd8;
+  --accent:#ff5533;
+}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:'JetBrains Mono','Fira Code','Cascadia Code',Consolas,monospace;
+  font-size:13px;background:var(--bg);color:var(--text);
+  display:grid;grid-template-rows:36px 1fr 28px;
+}
+
+/* ── HEADER ─────────────────────────────────────── */
+header{
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 14px;gap:20px;
+}
+.logo{color:var(--green);font-size:10px;letter-spacing:3px}
+.title{color:var(--cyan);font-size:12px}
+.hdr-right{margin-left:auto;display:flex;gap:10px;align-items:center}
+.filter-btns{display:flex;gap:4px}
+.fbtn{
+  background:none;border:1px solid var(--border2);color:var(--dim2);
+  font-family:inherit;font-size:10px;padding:2px 8px;cursor:pointer;
+  letter-spacing:1px
+}
+.fbtn.active{border-color:var(--cyan);color:var(--cyan)}
+.fbtn:hover{border-color:var(--text);color:var(--text)}
+
+/* ── MAIN GRID ───────────────────────────────────── */
+main{display:grid;grid-template-columns:240px 1fr;overflow:hidden}
+
+/* ── SIDEBAR ─────────────────────────────────────── */
+aside{
+  background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.search-wrap{padding:6px;border-bottom:1px solid var(--border)}
+#search{
+  width:100%;background:var(--bg3);border:1px solid var(--border2);
+  color:var(--text);font-family:inherit;font-size:12px;
+  padding:4px 8px;outline:none
+}
+#search:focus{border-color:var(--cyan)}
+.sidebar-label{
+  padding:4px 10px;font-size:9px;color:var(--dim);
+  letter-spacing:2px;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between
+}
+#theme-list{overflow-y:auto;flex:1}
+#theme-list::-webkit-scrollbar{width:3px}
+#theme-list::-webkit-scrollbar-track{background:var(--bg2)}
+#theme-list::-webkit-scrollbar-thumb{background:var(--border2)}
+.titem{
+  padding:5px 10px;cursor:pointer;
+  border-left:2px solid transparent;
+  display:flex;flex-direction:column;gap:4px;
+  overflow:hidden;position:relative
+}
+.titem:hover{background:var(--bg3)}
+.titem.active{border-left-color:var(--green);background:var(--bg3)}
+.titem.hidden{display:none}
+.titem-row{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.titem-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.titem:hover .titem-name{color:var(--cyan)}
+.titem.active .titem-name{color:var(--green)}
+.badge{
+  font-size:9px;padding:1px 4px;border:1px solid;flex-shrink:0
+}
+.badge.dark{color:var(--dim2);border-color:var(--dim)}
+.badge.light{color:#7a9060;border-color:#3a5030}
+
+/* mini snippet preview inside list item */
+.mini-pre{
+  display:none;font-size:10px;line-height:1.4;overflow:hidden;
+  max-height:48px;pointer-events:none;border-radius:0
+}
+.titem:hover .mini-pre,.titem.active .mini-pre{display:block}
+.mini-pre code.hljs{padding:4px 6px;font-size:10px;line-height:1.4}
+
+/* ── CONTENT ─────────────────────────────────────── */
+section{display:grid;grid-template-rows:1fr 180px;overflow:hidden}
+
+/* ── PREVIEW ─────────────────────────────────────── */
+.preview-wrap{overflow:auto;padding:14px;background:var(--bg)}
+.pane-label{
+  font-size:9px;color:var(--dim2);letter-spacing:2px;
+  margin-bottom:8px;text-transform:uppercase
+}
+#preview pre{margin-bottom:10px}
+#preview code.hljs{font-size:12px;line-height:1.65;padding:14px 16px}
+
+/* ── OUTPUT PANE ─────────────────────────────────── */
+.output-pane{
+  border-top:1px solid var(--border);background:var(--bg2);
+  display:flex;flex-direction:column
+}
+.output-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:4px 10px;border-bottom:1px solid var(--border);
+  font-size:9px;color:var(--dim2);letter-spacing:2px
+}
+.output-hdr-left{display:flex;gap:8px;align-items:center}
+#current-theme{color:var(--amber)}
+.copy-btn{
+  background:none;border:1px solid var(--green);color:var(--green);
+  font-family:inherit;font-size:10px;padding:2px 10px;cursor:pointer;
+  letter-spacing:1px
+}
+.copy-btn:hover{background:var(--green);color:var(--bg)}
+.copy-btn.ok{border-color:var(--cyan);color:var(--cyan)}
+#css-out{
+  flex:1;width:100%;background:var(--bg3);border:none;
+  color:var(--dim2);font-family:inherit;font-size:11px;
+  padding:6px 10px;resize:none;outline:none;
+}
+
+/* ── FOOTER ──────────────────────────────────────── */
+footer{
+  background:var(--bg2);border-top:1px solid var(--border);
+  display:flex;align-items:center;padding:0 14px;gap:20px;
+  font-size:10px;color:var(--dim)
+}
+#status{color:var(--green)}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">NEXUS</span>
+  <span class="title">// HIGHLIGHT THEME PICKER</span>
+  <div class="hdr-right">
+    <span style="font-size:10px;color:var(--dim)">FILTER:</span>
+    <div class="filter-btns">
+      <button class="fbtn active" data-filter="all">ALL</button>
+      <button class="fbtn" data-filter="dark">DARK</button>
+      <button class="fbtn" data-filter="light">LIGHT</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <aside>
+    <div class="search-wrap">
+      <input id="search" type="text" placeholder="filter themes..." autocomplete="off" spellcheck="false">
+    </div>
+    <div class="sidebar-label">
+      <span>THEMES</span>
+      <span id="count"></span>
+    </div>
+    <div id="theme-list"></div>
+  </aside>
+
+  <section>
+    <div class="preview-wrap">
+      <div class="pane-label">LIVE PREVIEW</div>
+      <div id="preview">
+
+        <pre><code class="language-bash">#!/usr/bin/env bash
+# nexus-security-check.sh — quick posture audit
+NEXUS_HOME="${NEXUS_HOME:-$HOME/NeXuS}"
+LOG="$NEXUS_HOME/logs/security.log"
+
+check_service() {
+    local svc="$1"
+    if rc-service "$svc" status &>/dev/null; then
+        echo "[OK]  $svc running"
+    else
+        echo "[!!]  $svc DOWN" | tee -a "$LOG"
+    fi
+}
+
+for svc in psad fail2ban ossec-hids; do
+    check_service "$svc"
+done
+
+# AIDE integrity check (offline hashes)
+aide --check 2>&1 | grep -E "^(Added|Removed|Changed):" | head -20
+</code></pre>
+
+        <pre><code class="language-python">#!/usr/bin/env python3
+"""nexus_metrics_collector.py — node health aggregator"""
+import json, subprocess
+from pathlib import Path
+
+NEXUS_HOME = Path.home() / "NeXuS"
+SERVICES = ["psad", "fail2ban", "ossec-hids", "unbound"]
+
+def check_service(name: str) -> dict:
+    result = subprocess.run(
+        ["rc-service", name, "status"],
+        capture_output=True, text=True
+    )
+    return {
+        "name": name,
+        "running": result.returncode == 0,
+        "output": result.stdout.strip()
+    }
+
+if __name__ == "__main__":
+    report = {
+        "node": "nexus-node-01",
+        "services": [check_service(s) for s in SERVICES],
+    }
+    print(json.dumps(report, indent=2))
+</code></pre>
+
+        <pre><code class="language-javascript">// nexus-web-server — universal API proxy
+const NEXUS_HOME = process.env.NEXUS_HOME ?? `${process.env.HOME}/NeXuS`;
+const PORT = parseInt(process.env.NWS_PORT ?? '8443');
+
+const providers = Object.fromEntries(
+  Object.entries(process.env)
+    .filter(([k]) => k.startsWith('PROVIDER_'))
+    .map(([k, v]) => [k.replace('PROVIDER_', ''), v])
+);
+
+async function handleProxy(req, res) {
+  const provider = providers[req.params.id];
+  if (!provider) return res.status(404).json({ error: 'unknown provider' });
+  // keys stay server-side — never in browser
+  const upstream = await fetch(provider.url, {
+    headers: { Authorization: `Bearer ${provider.key}` },
+    body: req.body
+  });
+  return res.json(await upstream.json());
+}
+</code></pre>
+
+      </div>
+    </div>
+
+    <div class="output-pane">
+      <div class="output-hdr">
+        <div class="output-hdr-left">
+          <span>CSS FOR MARKDOWN-VIEWER</span>
+          <span>→</span>
+          <span id="current-theme">none</span>
+        </div>
+        <button class="copy-btn" id="copy-btn">COPY</button>
+        <button class="copy-btn" id="set-global-btn" style="background:var(--green);color:#000;margin-left:6px">SET GLOBAL</button>
+        <span id="global-status" style="font-size:10px;color:var(--dim2);margin-left:8px"></span>
+      </div>
+      <textarea id="css-out" readonly placeholder="← select a theme to generate CSS for markdown-viewer options"></textarea>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span id="status">READY</span>
+  <span>SET GLOBAL → updates all bifrost-bridge apps instantly</span>
+  <span style="margin-left:auto">active: <span id="footer-active" style="color:var(--cyan)">—</span></span>
+</footer>
+
+<link id="hljs-theme-link" rel="stylesheet" href="">
+
+<script>
+const THEMES = [
+  ["1c-light","light"],["a11y-dark","dark"],["a11y-light","light"],
+  ["agate","dark"],["an-old-hope","dark"],["androidstudio","dark"],
+  ["arduino-light","light"],["arta","light"],["ascetic","light"],
+  ["atom-one-dark","dark"],["atom-one-dark-reasonable","dark"],["atom-one-light","light"],
+  ["brown-paper","light"],["codepen-embed","light"],["color-brewer","light"],
+  ["cybertopia-cherry","dark"],["cybertopia-dimmer","dark"],
+  ["cybertopia-icecap","dark"],["cybertopia-saturated","dark"],
+  ["dark","dark"],["default","light"],["devibeans","dark"],["docco","light"],
+  ["equinox","dark"],["far","dark"],["felipec","dark"],["foundation","light"],
+  ["github","light"],["github-dark","dark"],["github-dark-dimmed","dark"],
+  ["gml","light"],["googlecode","light"],["gradient-dark","dark"],["gradient-light","light"],
+  ["grayscale","light"],["hybrid","dark"],["idea","light"],["intellij-light","light"],
+  ["ir-black","dark"],["isbl-editor-dark","dark"],["isbl-editor-light","light"],
+  ["kimbie-dark","dark"],["kimbie-light","light"],["lightfair","light"],["lioshi","light"],
+  ["magula","light"],["mono-blue","light"],["monokai","dark"],["monokai-sublime","dark"],
+  ["night-owl","dark"],["nnfx-dark","dark"],["nnfx-light","light"],["nord","dark"],
+  ["obsidian","dark"],["panda-syntax-dark","dark"],["panda-syntax-light","light"],
+  ["paraiso-dark","dark"],["paraiso-light","light"],["pojoaque","dark"],
+  ["purebasic","light"],["qtcreator-dark","dark"],["qtcreator-light","light"],
+  ["rainbow","light"],["rose-pine","dark"],["rose-pine-dawn","light"],["rose-pine-moon","dark"],
+  ["routeros","light"],["school-book","light"],["shades-of-purple","dark"],
+  ["srcery","dark"],["stackoverflow-dark","dark"],["stackoverflow-light","light"],
+  ["sunburst","dark"],["tokyo-night-dark","dark"],["tokyo-night-light","light"],
+  ["tomorrow-night-blue","dark"],["tomorrow-night-bright","dark"],
+  ["vs","light"],["vs-dark","dark"],["vs2015","dark"],["xcode","light"],["xt256","dark"]
+];
+
+// Pre-extracted colors [bg, fg, keyword, string, comment]
+const COLORS = {"1c-light":["#fff","#00f","","#963200","green"],"a11y-dark":["#2b2b2b","#f8f8f2","","",""],"a11y-light":["#fefefe","#545454","","",""],"agate":["#333","#fff","","#a2fca2",""],"an-old-hope":["#1c1d21","#c0c5ce","","",""],"androidstudio":["#282b2e","#a9b7c6","","#6a8759",""],"arduino-light":["#fff","#434f54","#728e00","","rgba(149,165,166,.8)"],"arta":["#222","#aaa","","",""],"ascetic":["#fff","#000","","",""],"atom-one-dark":["#282c34","#abb2bf","#c678dd","#98c379",""],"atom-one-dark-reasonable":["#282c34","#abb2bf","","#9ccc65",""],"atom-one-light":["#fafafa","#383a42","#a626a4","#50a14f",""],"brown-paper":["#b7a68e","#363c69","","",""],"codepen-embed":["#222","#fff","","#8f9c6c",""],"color-brewer":["#fff","#000","","",""],"cybertopia-cherry":["#1a1a2e","#e0d7ff","#ff79c6","#a9dc76","#6272a4"],"cybertopia-dimmer":["#1e1e2e","#cdd6f4","#89b4fa","#a6e3a1","#585b70"],"cybertopia-icecap":["#1e2030","#cad3f5","#8aadf4","#a6da95","#5b6078"],"cybertopia-saturated":["#1a1b26","#a9b1d6","#bb9af7","#9ece6a","#565f89"],"dark":["#303030","#ddd","","",""],"default":["#f3f3f3","#444","","#38a","#697070"],"devibeans":["#000","#a39e9b","#0087ff","",""],"docco":["#f8f8ff","#000","","#219161",""],"equinox":["#0e0f16","#c8cdd4","#c678dd","#e5c07b","#5c6370"],"far":["navy","#0ff","","",""],"felipec":["#1d1c21","#e0e0e0","#5fb8f2","#93e4a4",""],"foundation":["#eee","#000","","",""],"github":["#fff","#24292e","","#032f62",""],"github-dark":["#0d1117","#c9d1d9","","#a5d6ff",""],"github-dark-dimmed":["#22272e","#adbac7","","#96d0ff",""],"gml":["#222","silver","#ffb871","#ff0","#5b995b"],"googlecode":["#fff","#000","","#080",""],"gradient-dark":["#652487","#e7e4eb","","#38c0ff",""],"gradient-light":["#f9ccff","#250482","","#2681ab",""],"grayscale":["#fff","#333","","#333",""],"hybrid":["#1d1f21","#c5c8c6","#707880","#b5bd68",""],"idea":["#fff","#000","","green",""],"intellij-light":["#fff","#000","","#067d17",""],"ir-black":["#000","#f8f8f8","","#a8ff60",""],"isbl-editor-dark":["#404040","#ccc","","#97bf0d","#b5b5b5"],"isbl-editor-light":["#fff","#000","","navy","#555"],"kimbie-dark":["#221a0f","#d3af86","","",""],"kimbie-light":["#fbebd4","#84613d","","",""],"lightfair":["#fff","#444","","#4d99bf","#888"],"lioshi":["#303030","#c5c8c6","","#b5bd68","#8d8d8d"],"magula":["#f4f4f4","#000","","",""],"mono-blue":["#eaeef3","#00193a","","","#738191"],"monokai":["#272822","#ddd","","",""],"monokai-sublime":["#23241f","#f8f8f2","","",""],"night-owl":["#011627","#d6deeb","#c792ea","#ecc48d","#637777"],"nnfx-dark":["#333","#fff","","#bce",""],"nnfx-light":["#fff","#000","","#00f",""],"nord":["#2e3440","#d8dee9","#5e81ac","#a3be8c",""],"obsidian":["#282b2e","#e0e2e4","","",""],"panda-syntax-dark":["#2a2c2d","#e6e6e6","#ff75b5","",""],"panda-syntax-light":["#e6e6e6","#2a2c2d","#d92792","",""],"paraiso-dark":["#2f1e2e","#a39e9b","","",""],"paraiso-light":["#e7e9db","#4f424c","","",""],"pojoaque":["#181914","#dccf8f","","#468966",""],"purebasic":["#ffffdf","#000","","#0080ff",""],"qtcreator-dark":["#000","#aaa","","",""],"qtcreator-light":["#fff","#000","","",""],"rainbow":["#474949","#d1d9e1","","#8abeb7",""],"rose-pine":["#191724","#e0def4","#31748f","#ebbcba","#6e6a86"],"rose-pine-dawn":["#faf4ed","#575279","#286983","#d7827e","#9893a5"],"rose-pine-moon":["#232136","#e0def4","#3e8fb0","#ea9a97","#6e6a86"],"routeros":["#f0f0f0","#444","","#4d99bf","#888"],"school-book":["#f6f5b2","#3e5915","","",""],"shades-of-purple":["#2d2b57","#e3dfff","","#fb9e00","#ac65ff"],"srcery":["#1c1b19","#fce8c3","#ef2f27","#98bc37",""],"stackoverflow-dark":["#1c1b1b","#fff","","#b5bd68","#999"],"stackoverflow-light":["#f6f6f6","#2f3337","","#54790d","#656e77"],"sunburst":["#000","#f8f8f8","","#65b042",""],"tokyo-night-dark":["#1a1b26","#9aa5ce","#bb9af7","#9ece6a","#565f89"],"tokyo-night-light":["#d5d6db","#565a6e","#9854f1","#587539","#8990b3"],"tomorrow-night-blue":["#002451","#fff","","",""],"tomorrow-night-bright":["#000","#eaeaea","","",""],"vs":["#fff","#000","","",""],"vs-dark":["#202020","#ccc","","",""],"vs2015":["#1e1e1e","#dcdcdc","","#d69d85",""],"xcode":["#fff","#000","","#c41a16",""],"xt256":["#000","#eaeaea","","#0f0","#969896"]};
+
+// <link> tag — works on file:// unlike fetch()
+const themeLink  = document.getElementById('hljs-theme-link');
+const themeList  = document.getElementById('theme-list');
+const searchEl   = document.getElementById('search');
+const countEl    = document.getElementById('count');
+const cssOut     = document.getElementById('css-out');
+const copyBtn    = document.getElementById('copy-btn');
+const currentEl  = document.getElementById('current-theme');
+const statusEl   = document.getElementById('status');
+
+let activeTheme = null;
+let filterMode  = 'all';
+
+const SNIPPET = `<span class="hljs-keyword">const</span> x = <span class="hljs-string">"nexus"</span>; <span class="hljs-comment">// node</span>`;
+
+// build list
+THEMES.forEach(([name, mode]) => {
+  const el = document.createElement('div');
+  el.className = 'titem';
+  el.dataset.name = name;
+  el.dataset.mode = mode;
+  el.innerHTML = `
+    <div class="titem-row">
+      <span class="titem-name">${name}</span>
+      <span class="badge ${mode}">${mode}</span>
+    </div>
+    <pre class="mini-pre" data-name="${name}"><code class="hljs">${SNIPPET}</code></pre>`;
+  el.addEventListener('click', () => selectTheme(name, mode, el));
+  el.addEventListener('mouseenter', () => paintMini(name));
+  themeList.appendChild(el);
+});
+updateCount();
+
+// paint mini-preview using pre-extracted colors — no fetch needed
+function paintMini(name) {
+  const miniEl = document.querySelector(`.mini-pre[data-name="${name}"] code`);
+  if (!miniEl || miniEl.dataset.painted) return;
+  const [bg, fg, kw, str, cmt] = COLORS[name] ?? [];
+  if (bg) miniEl.style.background = bg;
+  if (fg) miniEl.style.color = fg;
+  miniEl.querySelectorAll('.hljs-keyword').forEach(e => { if (kw) e.style.color = kw; });
+  miniEl.querySelectorAll('.hljs-string').forEach(e  => { if (str) e.style.color = str; });
+  miniEl.querySelectorAll('.hljs-comment').forEach(e => { if (cmt) e.style.color = cmt; });
+  miniEl.dataset.painted = '1';
+}
+
+// filter buttons
+document.querySelectorAll('.fbtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    filterMode = btn.dataset.filter;
+    applyFilter();
+  });
+});
+
+searchEl.addEventListener('input', applyFilter);
+
+function applyFilter() {
+  const q = searchEl.value.toLowerCase();
+  let vis = 0;
+  themeList.querySelectorAll('.titem').forEach(el => {
+    const show = el.dataset.name.includes(q) && (filterMode === 'all' || el.dataset.mode === filterMode);
+    el.classList.toggle('hidden', !show);
+    if (show) vis++;
+  });
+  countEl.textContent = vis;
+}
+
+function updateCount() {
+  countEl.textContent = themeList.querySelectorAll('.titem:not(.hidden)').length;
+}
+
+function getCssViaXhr(url) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onload = () => xhr.status === 0 || xhr.status === 200 ? resolve(xhr.responseText) : reject();
+    xhr.onerror = reject;
+    xhr.send();
+  });
+}
+
+function selectTheme(name, mode, el) {
+  themeList.querySelectorAll('.titem').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  activeTheme = name;
+  currentEl.textContent = name;
+  statusEl.textContent = `loading ${name}...`;
+
+  // <link> swap — works on file://
+  const href = `./styles/${name}.min.css`;
+  themeLink.onload = () => {
+    hljs.highlightAll();
+    statusEl.textContent = `${name} · ${mode}`;
+  };
+  themeLink.href = href;
+  paintMini(name);
+
+  // try XHR for the copy-paste CSS output
+  cssOut.value = `/* loading ${name}... */`;
+  getCssViaXhr(href).then(css => {
+    cssOut.value = `/* highlight.js theme: ${name} */\n/* paste into: Markdown Viewer → Options → Custom CSS */\n\n${css}`;
+    statusEl.textContent = `${name} · ${mode} · ${css.length.toLocaleString()} bytes`;
+  }).catch(() => {
+    cssOut.value = `/* XHR also blocked — paste this @import into Markdown Viewer → Custom CSS: */\n\n@import url("file://${window.location.pathname.replace(/[^/]+$/,'')}styles/${name}.min.css");`;
+    statusEl.textContent = `${name} · ${mode} · @import fallback`;
+  });
+}
+
+copyBtn.addEventListener('click', () => {
+  if (!cssOut.value) return;
+  navigator.clipboard.writeText(cssOut.value).then(() => {
+    copyBtn.textContent = 'COPIED';
+    copyBtn.classList.add('ok');
+    setTimeout(() => { copyBtn.textContent = 'COPY'; copyBtn.classList.remove('ok'); }, 1800);
+  });
+});
+
+// paint all visible mini-previews immediately (no network needed)
+THEMES.forEach(([name]) => paintMini(name));
+
+// ── Global theme API ──────────────────────────────────────────────────────
+const globalStatusEl  = document.getElementById('global-status');
+const footerActiveEl  = document.getElementById('footer-active');
+const setGlobalBtn    = document.getElementById('set-global-btn');
+
+async function fetchActiveTheme() {
+  try {
+    const r = await fetch('/api/theme');
+    if (r.ok) {
+      const d = await r.json();
+      return d.theme || 'tokyo-night-dark';
+    }
+  } catch(_) {}
+  return 'tokyo-night-dark';
+}
+
+async function setGlobalTheme(name) {
+  try {
+    const r = await fetch('/api/theme', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({theme: name})
+    });
+    if (r.ok) {
+      globalStatusEl.textContent = '✓ global theme set';
+      globalStatusEl.style.color = 'var(--green)';
+      footerActiveEl.textContent = name;
+      setTimeout(() => { globalStatusEl.textContent = ''; }, 3000);
+      // notify parent map page so header label updates
+      if (window.parent !== window) {
+        window.parent.postMessage({type: 'nexus-theme-set', theme: name}, '*');
+      }
+    } else {
+      globalStatusEl.textContent = '✗ failed';
+      globalStatusEl.style.color = 'var(--accent)';
+    }
+  } catch(e) {
+    globalStatusEl.textContent = '✗ ' + e.message;
+    globalStatusEl.style.color = 'var(--accent)';
+  }
+}
+
+setGlobalBtn.addEventListener('click', () => {
+  if (activeTheme) setGlobalTheme(activeTheme);
+});
+
+// auto-load the saved global theme on open
+(async () => {
+  const saved = await fetchActiveTheme();
+  footerActiveEl.textContent = saved;
+  const savedItem = themeList.querySelector(`[data-name="${saved}"]`);
+  if (savedItem) {
+    savedItem.click();
+    setTimeout(() => savedItem.scrollIntoView({block:'center'}), 100);
+  } else {
+    // fallback to tokyo-night-dark
+    const def = themeList.querySelector('[data-name="tokyo-night-dark"]');
+    if (def) def.click();
+  }
+})();
+
+hljs.highlightAll();
+</script>
+</body>
+</html>

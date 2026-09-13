@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeXuS — Doctrine Library</title>
+<style>
+  :root {
+    --bg:      #0a0f0a;
+    --surface: #111811;
+    --border:  #1a2a1a;
+    --text:    #c9d1d9;
+    --muted:   #6e7681;
+    --neon:    #39d353;
+    --axiom:   #00ffff;
+    --mag:     #ff00ff;
+    --gold:    #d29922;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  header {
+    padding: 16px 28px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 20;
+  }
+  .logo { font-family: monospace; font-size: 16px; font-weight: 800; color: var(--neon); letter-spacing: 2px; }
+  .title { font-size: 13px; color: var(--muted); }
+  .spacer { flex: 1; }
+  #search {
+    background: #0d140d; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); padding: 6px 12px; font-size: 13px; width: 200px; outline: none;
+  }
+  #search:focus { border-color: var(--neon); }
+  #search::placeholder { color: var(--muted); }
+  .back-btn {
+    font-size: 11px; padding: 5px 12px; border-radius: 6px;
+    border: 1px solid var(--border); background: #0d140d;
+    color: var(--muted); text-decoration: none; font-family: monospace;
+    transition: all .12s;
+  }
+  .back-btn:hover { color: var(--neon); border-color: var(--neon); }
+
+  .hero {
+    padding: 28px 28px 20px;
+    background: linear-gradient(180deg, #050f05 0%, var(--bg) 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  .hero h1 { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .hero p { color: var(--muted); font-size: 13px; max-width: 600px; line-height: 1.6; }
+  .tagline {
+    font-family: monospace; font-size: 11px; color: var(--neon);
+    margin-bottom: 10px; letter-spacing: 1px;
+  }
+
+  /* ── grid ── */
+  .grid-wrap { padding: 24px 28px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color .15s, transform .1s;
+  }
+  .card:hover { border-color: var(--neon); transform: translateY(-2px); }
+  .card.hidden { display: none; }
+
+  .thumb {
+    width: 100%; aspect-ratio: 16/9;
+    object-fit: cover;
+    display: block;
+    background: #0d150d;
+  }
+  .card-body { padding: 12px; }
+  .card-name {
+    font-size: 12px; font-family: monospace;
+    color: var(--neon); font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* ── lightbox ── */
+  #lightbox {
+    display: none;
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,.92);
+    align-items: center; justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+  }
+  #lightbox.open { display: flex; }
+  #lb-img {
+    max-width: 95vw; max-height: 88vh;
+    border-radius: 6px;
+    border: 1px solid var(--neon);
+    box-shadow: 0 0 40px #00ff0020;
+  }
+  #lb-name {
+    font-family: monospace; font-size: 12px;
+    color: var(--neon); text-align: center;
+  }
+  #lb-close {
+    position: fixed; top: 16px; right: 20px;
+    font-size: 24px; color: var(--muted);
+    cursor: pointer; background: none; border: none;
+    transition: color .12s;
+  }
+  #lb-close:hover { color: var(--neon); }
+  #lb-prev, #lb-next {
+    position: fixed; top: 50%; transform: translateY(-50%);
+    font-size: 28px; color: var(--muted);
+    cursor: pointer; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 14px; transition: all .12s;
+  }
+  #lb-prev { left: 12px; }
+  #lb-next { right: 12px; }
+  #lb-prev:hover, #lb-next:hover { color: var(--neon); border-color: var(--neon); }
+
+  footer {
+    text-align: center; padding: 20px;
+    color: var(--muted); font-size: 11px; font-family: monospace;
+    border-top: 1px solid var(--border); margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">NeXuS</div>
+    <div class="title">Doctrine Library</div>
+  </div>
+  <div class="spacer"></div>
+  <input type="text" id="search" placeholder="Search doctrine…" autocomplete="off">
+  <a href="/" class="back-btn">← Hub</a>
+</header>
+
+<div class="hero">
+  <div class="tagline">// CANONICAL DOCTRINE · NOTEBOOKLM ARCHIVES · VERIFIED //</div>
+  <h1>The NeXuS Doctrine Library</h1>
+  <p>"Replacing corporate trust with mathematical verification for individual freedom." Every document here is a founding principle rendered visual. Study before you build.</p>
+</div>
+
+<div class="grid-wrap">
+  <div class="grid" id="grid">
+    <!-- rendered by JS -->
+  </div>
+</div>
+
+<footer id="footer">NeXuS Network · Seen Without Being Known · Math Has No Family</footer>
+
+<!-- lightbox -->
+<div id="lightbox">
+  <button id="lb-close">✕</button>
+  <button id="lb-prev">‹</button>
+  <img id="lb-img" src="" alt="">
+  <div id="lb-name"></div>
+  <button id="lb-next">›</button>
+</div>
+
+<script>
+// ── pretty names ────────────────────────────────────────────────────────────
+const NAMES = {
+  "Anatomy_of_a_Crypto-Republic.png":                   "Anatomy of a Crypto-Republic",
+  "Ghost_Gate_Sovereign_Egress_Architecture.png":       "Ghost Gate — Sovereign Egress Architecture",
+  "Hybrid_Sovereignty_Architecture_Technical_Infographic.png": "Hybrid Sovereignty Architecture",
+  "Janus_Protocol_Sovereign_Security_Overview.png":     "Janus Protocol — Sovereign Security",
+  "NeXuS_AI_Sovereign_Intelligence.png":                "NeXuS AI Sovereign Intelligence",
+  "NeXuS_Architecture_of_Absolute_Sovereignty.png":     "Architecture of Absolute Sovereignty",
+  "NeXuS_Architecture_of_Sovereignty_Diagram.png":      "Architecture of Sovereignty — Diagram",
+  "NeXuS_Dark-Stack_Operator_s_Guide.png":              "Dark Stack Operator's Guide",
+  "NeXuS_How_to_Blow_Shit_Up_Protocol_Edition.png":     "How To Blow Shit Up (Protocol Edition)",
+  "NeXuS_Hybrid_Sovereignty_Architecture.png":          "Hybrid Sovereignty Architecture II",
+  "NeXuS_Hybrid_Sovereignty_Network_Architecture.png":  "Hybrid Sovereignty Network Architecture",
+  "NeXuS_Network_Mechanics_Overview.png":               "Network Mechanics Overview",
+  "NeXuS_Protocol_Master_Class_Infographic.png":        "Master Class — The Wick and the Flame",
+  "NeXuS_Protocol_Sovereign_Technology_Infographic.png":"Protocol Sovereign Technology",
+  "NeXuS_Sovereignty_Master_Class_Infographic.png":     "Sovereignty Master Class",
+  "NeXuS_The_Sovereign_Protocol_Overview.png":          "The Sovereign Protocol Overview",
+  "NeXuS_Witness_Protocol_Architecture_Overview.png":   "Witness Protocol — Architecture of Indelible Existence",
+  "NeXuS__The_Sovereign_Signal_Process.png":            "The Sovereign Signal — Flame · Wick · Boom · Run",
+  "NeXuS__The_Sovereign_Stack_Overview.png":            "The Sovereign Stack Overview",
+  "NeXuS_and_DivaChain_System_Architecture.png":        "NeXuS × DivaChain System Architecture",
+  "NeXuS_and_Diva_Chain_Synergy.png":                   "NeXuS × DivaChain Synergy",
+  "Protocol_Phase_Master_Class_Infographic.png":        "Protocol Phase Master Class",
+  "Protocol_Phase_Master_Class_Infographic1.png":       "Protocol Phase Master Class II",
+  "Sovereign_Crypto-Republic_Infrastructure_Infographic.png": "Sovereign Crypto-Republic Infrastructure",
+  "Sovereign_Digital_Antidote_Infographic.png":         "The Sovereign Digital Antidote",
+  "Sovereign_Roadmap_Technical_Pillars.png":            "Sovereign Roadmap — Technical Pillars",
+  "Sovereign_Synergy_System_Overview.png":              "Sovereign Synergy — 5 Principles",
+  "Sovereign_Technology_Stack_Architecture.png":        "Sovereign Technology Stack Architecture",
+  "The_Architecture_of_Sovereignty_Infographic.png":    "Architecture of Sovereignty — LiVeWiRe × NeXuS RADIO",
+  "The_Sovereign_Stream_Data_Flow-007.png":             "The Sovereign Stream — Data Flow",
+  "nexus-diva-overview.png":                            "Anatomy of a Crypto-Republic (Full)",
+  "nexus-pyramid.png":                                  "NeXuS Pyramid",
+  "the-ghost-gate.png":                                 "The Ghost Gate",
+  "zombie-citadel.png":                                 "The Sovereign Offline Citadel — AXIOM",
+};
+
+const files = Object.keys(NAMES);
+let visible = [...files];
+let lbIndex = 0;
+
+function pretty(f) { return NAMES[f] || f.replace(/[_-]/g,' ').replace(/\.png|\.jpg/,''); }
+
+function render(list) {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  list.forEach((f, i) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.idx = i;
+    card.innerHTML = `
+      <img class="thumb" src="/doctrine/${encodeURIComponent(f)}" alt="${pretty(f)}" loading="lazy">
+      <div class="card-body"><div class="card-name">${pretty(f)}</div></div>
+    `;
+    card.addEventListener("click", () => openLightbox(list, i));
+    grid.appendChild(card);
+  });
+  document.getElementById("footer").textContent =
+    `${list.length} documents · NeXuS Network · Seen Without Being Known`;
+}
+
+function openLightbox(list, i) {
+  lbIndex = i;
+  visible = list;
+  document.getElementById("lb-img").src = `/doctrine/${encodeURIComponent(list[i])}`;
+  document.getElementById("lb-name").textContent = pretty(list[i]);
+  document.getElementById("lightbox").classList.add("open");
+}
+
+function closeLightbox() { document.getElementById("lightbox").classList.remove("open"); }
+
+document.getElementById("lb-close").addEventListener("click", closeLightbox);
+document.getElementById("lightbox").addEventListener("click", e => {
+  if (e.target === document.getElementById("lightbox")) closeLightbox();
+});
+document.getElementById("lb-prev").addEventListener("click", e => {
+  e.stopPropagation();
+  lbIndex = (lbIndex - 1 + visible.length) % visible.length;
+  document.getElementById("lb-img").src = `/doctrine/${encodeURIComponent(visible[lbIndex])}`;
+  document.getElementById("lb-name").textContent = pretty(visible[lbIndex]);
+});
+document.getElementById("lb-next").addEventListener("click", e => {
+  e.stopPropagation();
+  lbIndex = (lbIndex + 1) % visible.length;
+  document.getElementById("lb-img").src = `/doctrine/${encodeURIComponent(visible[lbIndex])}`;
+  document.getElementById("lb-name").textContent = pretty(visible[lbIndex]);
+});
+document.addEventListener("keydown", e => {
+  if (!document.getElementById("lightbox").classList.contains("open")) return;
+  if (e.key === "Escape") closeLightbox();
+  if (e.key === "ArrowLeft") document.getElementById("lb-prev").click();
+  if (e.key === "ArrowRight") document.getElementById("lb-next").click();
+});
+
+document.getElementById("search").addEventListener("input", e => {
+  const q = e.target.value.trim().toLowerCase();
+  const filtered = q ? files.filter(f => pretty(f).toLowerCase().includes(q) || f.toLowerCase().includes(q)) : [...files];
+  render(filtered);
+});
+
+render(files);
+</script>
+</body>
+</html>

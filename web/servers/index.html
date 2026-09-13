@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeXuS — Server Status</title>
+<style>
+  :root {
+    --bg:      #080d08;
+    --surface: #0f160f;
+    --border:  #182018;
+    --text:    #c9d1d9;
+    --muted:   #6e7681;
+    --neon:    #39d353;
+    --axiom:   #00ffff;
+    --warn:    #d29922;
+    --danger:  #f85149;
+    --ok:      #39d353;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  header {
+    padding: 14px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px;
+    position: sticky; top: 0; z-index: 20;
+  }
+  .logo { font-family: monospace; font-size: 15px; font-weight: 800; color: var(--neon); letter-spacing: 2px; }
+  .title { font-size: 12px; color: var(--muted); }
+  .spacer { flex: 1; }
+  .refresh-info { font-family: monospace; font-size: 11px; color: var(--muted); }
+  #refresh-btn {
+    font-size: 11px; padding: 5px 12px; border-radius: 6px;
+    border: 1px solid var(--border); background: #0d140d;
+    color: var(--muted); cursor: pointer; font-family: monospace;
+    transition: all .12s;
+  }
+  #refresh-btn:hover { color: var(--neon); border-color: var(--neon); }
+  .back-btn {
+    font-size: 11px; padding: 5px 12px; border-radius: 6px;
+    border: 1px solid var(--border); background: #0d140d;
+    color: var(--muted); text-decoration: none; font-family: monospace;
+    transition: all .12s;
+  }
+  .back-btn:hover { color: var(--neon); border-color: var(--neon); }
+
+  .hero {
+    padding: 20px 24px 16px;
+    background: linear-gradient(180deg, #030a03 0%, var(--bg) 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  .hero h1 { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .tagline { font-family: monospace; font-size: 11px; color: var(--neon); margin-bottom: 6px; letter-spacing: 1px; }
+  .hero p { color: var(--muted); font-size: 12px; }
+
+  .stats-bar {
+    display: flex; gap: 24px; padding: 12px 24px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    font-family: monospace; font-size: 12px;
+  }
+  .stat { display: flex; gap: 6px; align-items: center; }
+  .stat-val { color: var(--neon); font-weight: 700; }
+  .stat-label { color: var(--muted); }
+
+  .grid-wrap { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+
+  /* ── service card ── */
+  .svc-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color .15s;
+  }
+  .svc-card.up   { border-left: 3px solid var(--ok); }
+  .svc-card.down { border-left: 3px solid var(--danger); }
+  .svc-card.warn { border-left: 3px solid var(--warn); }
+
+  .svc-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; cursor: pointer;
+    user-select: none;
+  }
+  .svc-header:hover { background: #111a11; }
+
+  .status-dot {
+    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+  }
+  .status-dot.up   { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .status-dot.down { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+  .status-dot.warn { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+
+  .svc-name { font-weight: 700; font-size: 14px; color: #fff; flex: 1; }
+  .svc-desc { font-size: 11px; color: var(--muted); }
+  .svc-badges { display: flex; gap: 6px; align-items: center; margin-left: auto; flex-shrink: 0; }
+
+  .badge {
+    font-family: monospace; font-size: 10px; padding: 2px 7px;
+    border-radius: 4px; border: 1px solid; white-space: nowrap;
+  }
+  .badge-ok     { color: var(--ok);     border-color: #1a3a1a; background: #0d1f0d; }
+  .badge-warn   { color: var(--warn);   border-color: #3a2a0a; background: #1f160a; }
+  .badge-danger { color: var(--danger); border-color: #3a1a1a; background: #1f0a0a; }
+  .badge-muted  { color: var(--muted);  border-color: var(--border); background: transparent; }
+  .badge-axiom  { color: var(--axiom);  border-color: #0a2a2a; background: #051515; }
+
+  .chevron { color: var(--muted); font-size: 12px; transition: transform .15s; }
+  .svc-card.expanded .chevron { transform: rotate(90deg); }
+
+  /* ── expanded body ── */
+  .svc-body { display: none; border-top: 1px solid var(--border); }
+  .svc-card.expanded .svc-body { display: block; }
+
+  .svc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  @media (max-width: 700px) { .svc-grid { grid-template-columns: 1fr; } }
+
+  .svc-section { padding: 14px 16px; border-right: 1px solid var(--border); }
+  .svc-section:last-child { border-right: none; }
+  .svc-section + .svc-section { border-top: none; }
+  .section-title {
+    font-family: monospace; font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;
+  }
+
+  .meta-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
+  .meta-key { color: var(--muted); }
+  .meta-val { color: var(--text); font-family: monospace; font-size: 11px; }
+
+  .log-box {
+    background: #030a03;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px;
+    font-family: monospace; font-size: 10px;
+    color: #5a8a5a;
+    max-height: 180px;
+    overflow-y: auto;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .log-line-warn   { color: var(--warn); }
+  .log-line-error  { color: var(--danger); }
+  .log-line-info   { color: #5a8a5a; }
+
+  .links-list { display: flex; flex-direction: column; gap: 5px; }
+  .file-link {
+    font-family: monospace; font-size: 11px; color: var(--axiom);
+    background: #051515; border: 1px solid #0a2a2a;
+    border-radius: 4px; padding: 4px 8px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    cursor: pointer; transition: background .1s, border-color .1s;
+    text-decoration: none;
+  }
+  .file-link:hover { background: #0a2020; border-color: var(--axiom); }
+  .file-link .copy-icon { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+  .file-link.copied { background: #0d1f0d; border-color: var(--neon); color: var(--neon); }
+
+  .docs-link {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--neon); text-decoration: none;
+    font-family: monospace;
+  }
+  .docs-link:hover { text-decoration: underline; }
+
+  .no-log { color: var(--muted); font-size: 11px; font-style: italic; }
+
+  footer {
+    text-align: center; padding: 16px;
+    color: var(--muted); font-size: 10px; font-family: monospace;
+    border-top: 1px solid var(--border); margin-top: 8px;
+  }
+
+  .spinner { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+  #error-bar {
+    display: none; padding: 10px 24px;
+    background: #1f0a0a; border-bottom: 1px solid var(--danger);
+    color: var(--danger); font-family: monospace; font-size: 11px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">NeXuS</div>
+    <div class="title">Server Status</div>
+  </div>
+  <div class="spacer"></div>
+  <span class="refresh-info" id="next-refresh">auto-refresh in 30s</span>
+  <button id="refresh-btn">⟳ Refresh</button>
+  <a href="/" class="back-btn">← Hub</a>
+</header>
+
+<div id="error-bar"></div>
+
+<div class="hero">
+  <div class="tagline">// NODE HEALTH · LIVE METRICS · SERVICE REGISTRY //</div>
+  <h1>NeXuS Node Status</h1>
+  <p>Services running on this node · click any card to expand logs, links, and config paths</p>
+</div>
+
+<div class="stats-bar" id="stats-bar">
+  <div class="stat"><span class="stat-val" id="stat-up">–</span><span class="stat-label">up</span></div>
+  <div class="stat"><span class="stat-val" id="stat-down">–</span><span class="stat-label">down</span></div>
+  <div class="stat"><span class="stat-val" id="stat-total">–</span><span class="stat-label">total</span></div>
+  <div class="stat" style="margin-left:auto"><span class="stat-val" id="stat-ts" style="color:var(--muted)">–</span></div>
+</div>
+
+<div class="grid-wrap" id="cards"></div>
+
+<footer id="footer">NeXuS Network · Seen Without Being Known · Math Has No Family</footer>
+
+<script>
+let countdown = 30;
+let timer = null;
+let expandedIds = new Set();
+
+function statusClass(svc) {
+  if (!svc.running) return "down";
+  if (svc.port !== null && !svc.port_ok) return "warn";
+  return "up";
+}
+
+function dotClass(svc) { return statusClass(svc); }
+
+function badges(svc) {
+  const out = [];
+  const cls = statusClass(svc);
+  if (svc.running) {
+    out.push(`<span class="badge badge-ok">● RUNNING</span>`);
+    if (svc.pid) out.push(`<span class="badge badge-muted">PID ${svc.pid}</span>`);
+    if (svc.mem_mb) out.push(`<span class="badge badge-axiom">${svc.mem_mb} MB</span>`);
+  } else {
+    out.push(`<span class="badge badge-danger">✕ STOPPED</span>`);
+  }
+  if (svc.port !== null) {
+    if (svc.port_ok) {
+      out.push(`<span class="badge badge-ok">:${svc.port} open</span>`);
+    } else {
+      out.push(`<span class="badge badge-warn">:${svc.port} closed</span>`);
+    }
+  }
+  return out.join("");
+}
+
+function colorLog(line) {
+  const l = line.toLowerCase();
+  if (l.includes("error") || l.includes("fail") || l.includes("crit")) return `<span class="log-line-error">${esc(line)}</span>`;
+  if (l.includes("warn")) return `<span class="log-line-warn">${esc(line)}</span>`;
+  return `<span class="log-line-info">${esc(line)}</span>`;
+}
+
+function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+function buildCard(svc) {
+  const sc = statusClass(svc);
+  const expanded = expandedIds.has(svc.id) ? " expanded" : "";
+  const logHtml = svc.log && svc.log.length
+    ? `<div class="log-box">${svc.log.map(colorLog).join("\n")}</div>`
+    : `<span class="no-log">No log available</span>`;
+
+  const linksHtml = svc.links && svc.links.length
+    ? svc.links.map(l => `
+        <div class="file-link" onclick="copyPath(this,'${esc(l.path)}')" title="Click to copy path">
+          <span>${esc(l.label)}</span>
+          <span class="copy-icon">⎘</span>
+        </div>`).join("")
+    : `<span class="no-log">No links configured</span>`;
+
+  const docsHtml = svc.docs
+    ? `<a class="docs-link" href="${esc(svc.docs)}" target="_blank" rel="noopener">↗ Docs</a>`
+    : `<span class="no-log">No docs link</span>`;
+
+  const logPathHtml = svc.log_path
+    ? `<div class="meta-row"><span class="meta-key">log</span><span class="meta-val">${esc(svc.log_path)}</span></div>`
+    : "";
+
+  return `
+<div class="svc-card ${sc}${expanded}" id="card-${svc.id}">
+  <div class="svc-header" onclick="toggleCard('${svc.id}')">
+    <div class="status-dot ${dotClass(svc)}"></div>
+    <div>
+      <div class="svc-name">${esc(svc.name)}</div>
+      <div class="svc-desc">${esc(svc.desc)}</div>
+    </div>
+    <div class="svc-badges">${badges(svc)}</div>
+    <span class="chevron">›</span>
+  </div>
+  <div class="svc-body">
+    <div class="svc-grid">
+      <div class="svc-section">
+        <div class="section-title">Metrics</div>
+        <div class="meta-row"><span class="meta-key">status</span><span class="meta-val">${svc.running ? "running" : "stopped"}</span></div>
+        ${svc.pid ? `<div class="meta-row"><span class="meta-key">PID</span><span class="meta-val">${svc.pid}</span></div>` : ""}
+        ${svc.mem_mb ? `<div class="meta-row"><span class="meta-key">RAM</span><span class="meta-val">${svc.mem_mb} MB</span></div>` : ""}
+        ${svc.port ? `<div class="meta-row"><span class="meta-key">port</span><span class="meta-val">:${svc.port} ${svc.port_ok ? "✓" : "✗"}</span></div>` : ""}
+        ${logPathHtml}
+      </div>
+      <div class="svc-section">
+        <div class="section-title">Files &amp; Dirs</div>
+        <div class="links-list">${linksHtml}</div>
+        <div style="margin-top:10px">${docsHtml}</div>
+      </div>
+    </div>
+    ${svc.log ? `
+    <div style="padding:0 16px 14px">
+      <div class="section-title" style="margin-bottom:8px">Recent Log</div>
+      ${logHtml}
+    </div>` : ""}
+  </div>
+</div>`;
+}
+
+function toggleCard(id) {
+  const card = document.getElementById(`card-${id}`);
+  if (!card) return;
+  if (card.classList.contains("expanded")) {
+    card.classList.remove("expanded");
+    expandedIds.delete(id);
+  } else {
+    card.classList.add("expanded");
+    expandedIds.add(id);
+  }
+}
+
+function copyPath(el, path) {
+  navigator.clipboard.writeText(path).then(() => {
+    el.classList.add("copied");
+    el.querySelector(".copy-icon").textContent = "✓";
+    setTimeout(() => {
+      el.classList.remove("copied");
+      el.querySelector(".copy-icon").textContent = "⎘";
+    }, 1500);
+  }).catch(() => {});
+}
+
+function showError(msg) {
+  const bar = document.getElementById("error-bar");
+  bar.textContent = "✕ " + msg;
+  bar.style.display = "block";
+}
+
+function clearError() {
+  document.getElementById("error-bar").style.display = "none";
+}
+
+async function load() {
+  document.getElementById("refresh-btn").innerHTML = '<span class="spinner">⟳</span>';
+  try {
+    const r = await fetch("/api/servers");
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    clearError();
+    render(data);
+  } catch(e) {
+    showError(`Failed to load server status: ${e.message}`);
+  } finally {
+    document.getElementById("refresh-btn").textContent = "⟳ Refresh";
+  }
+}
+
+function render(data) {
+  const svcs = data.services || [];
+  const up   = svcs.filter(s => s.running).length;
+  const down = svcs.length - up;
+
+  document.getElementById("stat-up").textContent    = up;
+  document.getElementById("stat-down").textContent  = down;
+  document.getElementById("stat-total").textContent = svcs.length;
+
+  const ts = data.ts ? new Date(data.ts * 1000).toLocaleTimeString() : "–";
+  document.getElementById("stat-ts").textContent = `last updated ${ts}`;
+
+  document.getElementById("cards").innerHTML = svcs.map(buildCard).join("");
+  document.getElementById("footer").textContent =
+    `${svcs.length} services · NeXuS Network · Seen Without Being Known`;
+}
+
+function startCountdown() {
+  if (timer) clearInterval(timer);
+  countdown = 30;
+  timer = setInterval(() => {
+    countdown--;
+    document.getElementById("next-refresh").textContent =
+      countdown > 0 ? `auto-refresh in ${countdown}s` : "refreshing…";
+    if (countdown <= 0) {
+      clearInterval(timer);
+      load().then(startCountdown);
+    }
+  }, 1000);
+}
+
+document.getElementById("refresh-btn").addEventListener("click", () => {
+  if (timer) clearInterval(timer);
+  load().then(startCountdown);
+});
+
+load().then(startCountdown);
+</script>
+</body>
+</html>

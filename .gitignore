@@ -1,0 +1,9 @@
+*.bak*
+__pycache__/
+*.pyc
+certs/key.pem
+.active-theme
+*.log
+web/static/hljs/styles/
+web/static/hljs/languages/
+web/static/hljs/highlight.min.js

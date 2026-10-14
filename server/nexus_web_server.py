@@ -59,7 +59,7 @@ UPLOAD_IMAGES_DIR = Path(os.environ.get("NEXUS_UPLOAD_IMAGES_DIR",
                     os.path.join(os.environ.get("HOME", ""), "NeXuS/uploads/images")))
 
 # set from argv in main(); module-level so the handler can read them
-ROOT: Path = BASE_DIR / "dist"
+ROOT: Path = BASE_DIR.parent / "web"
 
 # Ordered list of local env files (project-local overrides), set in main().
 # Precedence, highest first: process env  >  .local.env (these)  >  nexus.env  >  legacy key file.
@@ -116,8 +116,10 @@ PROVIDERS = {
                      "key_env": None,                   "requires_key": False, "kind": "chat"},
     "aihorde":      {"label": "AI Horde (keyless)","base_url": "https://aihorde.net/api/v2",
                      "key_env": None,                   "requires_key": False, "kind": "chat+image"},
+    "nexus-router": {"label": "NeXuS AI Router", "base_url": "http://127.0.0.1:8810/v1",
+                     "key_env": None,                   "requires_key": False, "kind": "chat+image"},
 }
-DEFAULTS = {"main": "aihorde", "image": "pollinations", "embedding": "local"}
+DEFAULTS = {"main": "nexus-router", "image": "pollinations", "embedding": "local"}
 
 POLLI_BASE = "https://gen.pollinations.ai"
 UA = "nexus-web-server"
@@ -132,6 +134,23 @@ NETDATA_BACKEND    = os.environ.get("NETDATA_URL",      "http://127.0.0.1:19999"
 NETDATA_PREFIX     = "/netdata"
 GRAFANA_BACKEND    = os.environ.get("GRAFANA_URL",      "http://127.0.0.1:3000")
 GRAFANA_PREFIX     = "/grafana"
+
+# ── NNCC dual-backend routing ─────────────────────────────────────────────
+# Python FastAPI :8801 → network management (networks, traffic, routing, health)
+# Go darknet    :8802 → darknet control  (services, logs, doctor, tor, hosting)
+NNCC_PY_BACKEND  = os.environ.get("NNCC_URL",         "http://127.0.0.1:8801")
+NNCC_GO_BACKEND  = os.environ.get("NNCC_DARKNET_URL", "http://127.0.0.1:8802")
+NNCC_API_PREFIX  = "/nncc/api"
+_NNCC_GO_PATHS   = ("/api/services", "/api/logs", "/api/doctor",
+                    "/api/hosting",  "/api/tor",  "/api/jurisdiction",
+                    "/api/status")
+
+def _nncc_backend(rel):
+    """Route /nncc/api rel paths to the correct backend."""
+    for p in _NNCC_GO_PATHS:
+        if rel == p or rel.startswith(p + "/"):
+            return NNCC_GO_BACKEND
+    return NNCC_PY_BACKEND
 
 # ── Global highlight.js theme ─────────────────────────────────────────────
 HLJS_THEME_FILE    = Path(os.environ.get("NEXUS_HOME", Path.home() / "NeXuS")) / "bifrost-bridge" / "web" / "static" / "hljs" / ".active-theme"
@@ -334,18 +353,25 @@ def log(msg):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "NeXuS-Web/1.0"
+    protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):
         log(f"{self.address_string()} {fmt % args}")
 
     # ── low-level send helpers ────────────────────────────────────────────────
     def _send(self, code, ctype, extra=None, sec_override=None):
+        # Force connection close unless the caller explicitly sets keep-alive (streaming).
+        # HTTP/1.1 keep-alive requires all responses to have Content-Length or chunked
+        # encoding; closing avoids hangs on responses that have neither.
+        extra = extra or {}
+        if "Connection" not in extra and "Transfer-Encoding" not in extra:
+            self.close_connection = True
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         headers = sec_override if sec_override is not None else SECURITY_HEADERS
         for k, v in headers.items():
             self.send_header(k, v)
-        for k, v in (extra or {}).items():
+        for k, v in extra.items():
             self.send_header(k, v)
         self.end_headers()
 
@@ -393,12 +419,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._nexus_api(path)
         if path.startswith("/api/"):
             return self._json({"error": f"unknown API route {path}"}, 404)
+        if path.startswith(NNCC_API_PREFIX):
+            return self._nncc_api_proxy(path)
         if path.startswith(CHARCARD_PREFIX):
             return self._charcard_proxy()
         if path.startswith(COPYPARTY_PREFIX):
             return self._copyparty_proxy()
         if path.startswith(GRAFANA_PREFIX):
             return self._grafana_proxy()
+        if path in ("/governor", "/governor/"):
+            return self._serve_static("/governor/index.html")
+        if path.startswith("/governor/"):
+            return self._serve_static(path)
         if path == "/oc/":
             self._send(302, "text/plain", {"Location": "/oc/index.html"})
             return
@@ -415,6 +447,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        if path.startswith(NNCC_API_PREFIX):
+            return self._nncc_api_proxy(path)
         if path == "/api/theme":
             return self._set_theme()
         if path == "/api/llm":
@@ -536,28 +570,54 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "passthrough failed", "detail": str(e)[:300]}, 502)
 
     # ── image proxy (key injected server-side; streams image) ─────────────────
+    # Tier logic:
+    #   1. If sk_ key present → try gen.pollinations.ai (paid, higher limits)
+    #   2. If no key OR paid tier returns 402 (insufficient balance) → fall back to
+    #      image.pollinations.ai (free tier, rate-limited but keyless)
     def _pollinations_image(self):
         key = load_secret("POLLINATIONS_API_KEY")
-        if not key or not key.startswith("sk_"):
-            return self._json({"error": "No valid POLLINATIONS_API_KEY (sk_...) in nexus.env"}, 500)
         q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         prompt = (q.get("prompt", [""])[0]).strip()
         if not prompt:
             return self._json({"error": "Missing prompt"}, 400)
-        model, width, height = q.get("model", ["flux"])[0], q.get("width", ["1024"])[0], q.get("height", ["1024"])[0]
-        upstream = (f"{POLLI_BASE}/image/{urllib.parse.quote(prompt)}"
-                    f"?model={urllib.parse.quote(model)}&width={urllib.parse.quote(width)}"
-                    f"&height={urllib.parse.quote(height)}&nologo=true"
-                    f"&key={urllib.parse.quote(key)}&referrer={UA}")
-        log(f"[PROXY] image (model={model} {width}x{height}) key=sk_***")
-        try:
-            req = urllib.request.Request(upstream, headers={"User-Agent": UA})
+        model  = q.get("model",  ["flux"])[0]
+        width  = q.get("width",  ["1024"])[0]
+        height = q.get("height", ["1024"])[0]
+        dims   = f"?model={urllib.parse.quote(model)}&width={urllib.parse.quote(width)}&height={urllib.parse.quote(height)}&nologo=true"
+        ep     = urllib.parse.quote(prompt)
+
+        def _stream(url, label):
+            req = urllib.request.Request(url, headers={"User-Agent": UA})
             with urllib.request.urlopen(req, timeout=120) as up:
                 self._send(200, up.headers.get("Content-Type", "image/jpeg"), {"Cache-Control": "no-store"})
                 while (chunk := up.read(65536)):
                     self.wfile.write(chunk)
+            log(f"[PROXY] image OK via {label} (model={model} {width}x{height})")
+
+        # ── paid tier ────────────────────────────────────────────────────────
+        if key and key.startswith("sk_"):
+            paid_url = f"{POLLI_BASE}/image/{ep}{dims}&key={urllib.parse.quote(key)}&referrer={UA}"
+            log(f"[PROXY] image paid (model={model} {width}x{height}) key=sk_***")
+            try:
+                return _stream(paid_url, "paid")
+            except urllib.error.HTTPError as e:
+                body = e.read()[:400]
+                if e.code == 402:
+                    log(f"[PROXY] image 402 insufficient balance — falling back to free tier")
+                else:
+                    return self._json({"error": f"Pollinations {e.code}",
+                                       "detail": body.decode("utf-8", "replace")}, e.code)
+            except Exception as e:
+                log(f"[PROXY] image paid failed ({e}) — falling back to free tier")
+
+        # ── free tier fallback ────────────────────────────────────────────────
+        free_url = f"https://image.pollinations.ai/prompt/{ep}{dims}"
+        log(f"[PROXY] image free-tier (model={model} {width}x{height})")
+        try:
+            return _stream(free_url, "free")
         except urllib.error.HTTPError as e:
-            self._json({"error": f"Pollinations {e.code}", "detail": e.read()[:300].decode("utf-8", "replace")}, e.code)
+            self._json({"error": f"Pollinations free-tier {e.code}",
+                        "detail": e.read()[:300].decode("utf-8", "replace")}, e.code)
         except Exception as e:
             self._json({"error": "Upstream request failed", "detail": str(e)[:300]}, 502)
 
@@ -622,16 +682,63 @@ class Handler(BaseHTTPRequestHandler):
 
         body = json.dumps(payload).encode("utf-8")
         log(f"[PROXY] llm {pid} -> {url} model={payload.get('model')} (stream={bool(payload.get('stream'))})")
+        is_stream = bool(payload.get("stream"))
         try:
             req = urllib.request.Request(url, data=body, headers=headers, method="POST")
             with urllib.request.urlopen(req, timeout=180) as up:
-                self._send(200, up.headers.get("Content-Type", "application/json"), {"Cache-Control": "no-store"})
-                while (chunk := up.read(8192)):
-                    self.wfile.write(chunk)
+                ctype = up.headers.get("Content-Type", "application/json")
+                if is_stream:
+                    self._send(200, ctype, {
+                        "Cache-Control": "no-store",
+                        "Transfer-Encoding": "chunked",
+                        "X-Accel-Buffering": "no",
+                        "Connection": "keep-alive",
+                    })
+                    buf = b""
+                    while (raw := up.read(8192)):
+                        buf += raw
+                        # Flush complete SSE lines, filtering Pollinations preamble
+                        # chunks that have choices:[] (empty array) — OC crashes on them.
+                        out_lines = []
+                        while b"\n" in buf:
+                            line, buf = buf.split(b"\n", 1)
+                            line_s = line.decode("utf-8", errors="replace").rstrip()
+                            if line_s.startswith("data:") and line_s != "data: [DONE]":
+                                try:
+                                    d = json.loads(line_s[5:].strip())
+                                    if isinstance(d.get("choices"), list) and len(d["choices"]) == 0:
+                                        continue  # drop Pollinations filter-results preamble
+                                except Exception:
+                                    pass
+                            out_lines.append(line + b"\n")
+                        chunk = b"".join(out_lines)
+                        if chunk:
+                            try:
+                                size = f"{len(chunk):X}\r\n".encode()
+                                self.wfile.write(size + chunk + b"\r\n")
+                                self.wfile.flush()
+                            except Exception:
+                                break
+                    # flush any remaining buffered bytes
+                    if buf:
+                        try:
+                            size = f"{len(buf):X}\r\n".encode()
+                            self.wfile.write(size + buf + b"\r\n")
+                            self.wfile.flush()
+                        except Exception:
+                            pass
                     try:
+                        self.wfile.write(b"0\r\n\r\n")
                         self.wfile.flush()
                     except Exception:
-                        break
+                        pass
+                else:
+                    data = up.read()
+                    self._send(200, ctype, {
+                        "Cache-Control": "no-store",
+                        "Content-Length": str(len(data)),
+                    })
+                    self.wfile.write(data)
         except urllib.error.HTTPError as e:
             self._json({"error": f"{prov['label']} {e.code}", "detail": e.read()[:500].decode("utf-8", "replace")}, e.code)
         except Exception as e:
@@ -1012,6 +1119,35 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             self._json({"error": f"copyparty unavailable: {e}"}, 502)
 
+    def _nncc_api_proxy(self, path):
+        """Route /nncc/api/* to Python FastAPI or Go darknet based on path."""
+        rel = path[len("/nncc"):]          # e.g. /api/services
+        backend = _nncc_backend(rel)
+        parsed  = urllib.parse.urlparse(self.path)
+        target  = backend.rstrip("/") + rel
+        if parsed.query:
+            target += "?" + parsed.query
+
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        body   = self.rfile.read(length) if length > 0 else None
+        fwd = {"User-Agent": UA, "Connection": "close"}
+        ct = self.headers.get("Content-Type")
+        if ct:
+            fwd["Content-Type"] = ct
+
+        try:
+            req = urllib.request.Request(target, data=body, headers=fwd, method=self.command)
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data  = resp.read()
+                ctype = resp.headers.get("Content-Type", "application/json")
+                self._bytes(data, ctype)
+        except urllib.error.HTTPError as e:
+            data  = e.read()
+            ctype = e.headers.get("Content-Type", "application/json")
+            self._bytes(data, ctype, code=e.code)
+        except Exception as e:
+            self._json({"error": f"NNCC backend unavailable: {str(e)[:120]}"}, 503)
+
     def _serve_active_theme_css(self):
         """Serve the currently active hljs theme CSS — apps import this instead of a hardcoded theme."""
         theme = _read_active_theme()
@@ -1131,11 +1267,11 @@ class Handler(BaseHTTPRequestHandler):
         '\n'
         '  /* 1 ── fetch interceptor */\n'
         '  var MAP={\n'
-        '    "api.openai.com":  BASE+"/api/llm/openai/v1",\n'
-        '    "api.mistral.ai":  BASE+"/api/llm/mistral/v1",\n'
-        '    "api.groq.com":    BASE+"/api/llm/groq/v1",\n'
-        '    "openrouter.ai":   BASE+"/api/llm/openrouter/v1",\n'
-        '    "aihorde.net":     BASE+"/api/llm/aihorde/v1",\n'
+        '    "api.openai.com":  BASE+"/api/llm/pollinations",\n'
+        '    "api.mistral.ai":  BASE+"/api/llm/mistral",\n'
+        '    "api.groq.com":    BASE+"/api/llm/groq",\n'
+        '    "openrouter.ai":   BASE+"/api/llm/openrouter",\n'
+        '    "aihorde.net":     BASE+"/api/llm/aihorde",\n'
         '  };\n'
         '  var _f=window.fetch.bind(window);\n'
         '  window.fetch=async function(url,opts){\n'
@@ -1150,6 +1286,8 @@ class Handler(BaseHTTPRequestHandler):
         '          break;\n'
         '        }\n'
         '      }\n'
+        '      /* fix double-v1 from stale IndexedDB config */\n'
+        '      url=url.replace(/(\\/api\\/llm\\/[^\\/]+)\\/v1\\/v1\\//,"$1/v1/");\n'
         '    }\n'
         '    return _f(url,opts);\n'
         '  };\n'
@@ -1169,26 +1307,22 @@ class Handler(BaseHTTPRequestHandler):
         '        if(!e.target.result||!e.target.result.value)\n'
         '          st.put({key:"openAiApiKey",value:"nexus-proxy"});\n'
         '      };\n'
-        '      /* proxy model configs — only if user hasn\'t set any */\n'
-        '      var cr=st.get("customModelConfigs");\n'
-        '      cr.onsuccess=function(e){\n'
-        '        if(e.target.result&&e.target.result.value)return;\n'
-        '        var cfgs=[\n'
-        '          \'{ name:"nexus-mistral",shortLabel:"NeXuS · Mistral",\'\n'
-        '          +\'endpointUrl:"\'+BASE+\'/api/llm/mistral/v1/chat/completions",\'\n'
-        '          +\'apiKey:"nexus-proxy",maxSequenceLength:32768,\'\n'
-        '          +\'type:"chat-completion",tokenPricing:{prompt:0,completion:0} }\',\n'
-        '          \'{ name:"nexus-groq",shortLabel:"NeXuS · Groq",\'\n'
-        '          +\'endpointUrl:"\'+BASE+\'/api/llm/groq/v1/chat/completions",\'\n'
-        '          +\'apiKey:"nexus-proxy",maxSequenceLength:32768,\'\n'
-        '          +\'type:"chat-completion",tokenPricing:{prompt:0,completion:0} }\',\n'
-        '          \'{ name:"nexus-openai",shortLabel:"NeXuS · OpenAI",\'\n'
-        '          +\'endpointUrl:"\'+BASE+\'/api/llm/openai/v1/chat/completions",\'\n'
-        '          +\'apiKey:"nexus-proxy",maxSequenceLength:128000,\'\n'
-        '          +\'type:"chat-completion",tokenPricing:{prompt:0,completion:0} }\',\n'
-        '        ].join("\\n");\n'
-        '        st.put({key:"customModelConfigs",value:cfgs});\n'
-        '      };\n'
+        '      /* proxy model configs — always overwrite nexus-proxy entries */\n'
+        '      var cfgs=[\n'
+        '        \'{ name:"openai",shortLabel:"NeXuS · Pollinations",\'\n'
+        '        +\'endpointUrl:"\'+BASE+\'/api/llm/pollinations",\'\n'
+        '        +\'apiKey:"nexus-proxy",maxSequenceLength:128000,\'\n'
+        '        +\'type:"chat-completion",tokenPricing:{prompt:0,completion:0} }\',\n'
+        '        \'{ name:"nexus-mistral",shortLabel:"NeXuS · Mistral",\'\n'
+        '        +\'endpointUrl:"\'+BASE+\'/api/llm/mistral",\'\n'
+        '        +\'apiKey:"nexus-proxy",maxSequenceLength:32768,\'\n'
+        '        +\'type:"chat-completion",tokenPricing:{prompt:0,completion:0} }\',\n'
+        '        \'{ name:"nexus-groq",shortLabel:"NeXuS · Groq",\'\n'
+        '        +\'endpointUrl:"\'+BASE+\'/api/llm/groq",\'\n'
+        '        +\'apiKey:"nexus-proxy",maxSequenceLength:32768,\'\n'
+        '        +\'type:"chat-completion",tokenPricing:{prompt:0,completion:0} }\',\n'
+        '      ].join("\\n");\n'
+        '      st.put({key:"customModelConfigs",value:cfgs});\n'
         '      tx.oncomplete=function(){db.close();};\n'
         '    };\n'
         '  }\n'
@@ -1216,8 +1350,10 @@ class Handler(BaseHTTPRequestHandler):
         # Redirect bare prefix (no trailing slash) to prefix/ so relative asset
         # paths (css/nexus.css, js/app.js) resolve correctly in the browser.
         if has_static and rel == "" and not path.endswith("/"):
+            self.close_connection = True
             self.send_response(301)
             self.send_header("Location", pfx + "/")
+            self.send_header("Content-Length", "0")
             self.end_headers()
             return
 
@@ -1305,6 +1441,12 @@ class Handler(BaseHTTPRequestHandler):
         ):
             data = self._rewrite_api_urls(data, app["prefix"])
 
+        # Inject fetch interceptor into OC HTML (works whether served via registry or direct path)
+        if app["prefix"] in ("/oc", "/oc/") and ctype == "text/html":
+            html_str = data.decode("utf-8", errors="replace")
+            if "NeXuS proxy auto-config" not in html_str:
+                data = html_str.replace("<head>", "<head>\n" + self._OC_INJECT, 1).encode("utf-8")
+
         self._bytes(data, ctype, sec_override=sec)
 
     # Build a rewrite map from the live provider registry so it stays in sync.
@@ -1377,26 +1519,42 @@ class Handler(BaseHTTPRequestHandler):
             'let OPENAI_API_KEY = (await db.misc.get("openAiApiKey"))?.value;',
             'let OPENAI_API_KEY = "nexus-proxy";'
         )
-        # Inject a fetch proxy that intercepts remaining api.openai.com runtime calls,
-        # routes them to Groq (fast, free tier), and translates gpt-* model names.
-        # Runs before any user interaction so OC never reaches the real OpenAI endpoint.
+        # Inject a fetch proxy that intercepts api.openai.com runtime calls:
+        #   text  → Pollinations /api/llm/pollinations/v1  (model: openai)
+        #   images → /api/pollinations/image (model: flux) → data URL for OC
         _FETCH_PROXY = (
             '<script>\n'
             '(function(){\n'
-            '  var P="groq";\n'
-            '  var M={"gpt-4":"groq/compound","gpt-4-turbo":"groq/compound",\n'
-            '    "gpt-4-turbo-preview":"groq/compound","gpt-4-0125-preview":"groq/compound",\n'
-            '    "gpt-3.5-turbo":"groq/compound-mini","gpt-3.5-turbo-16k":"groq/compound-mini"};\n'
+            '  var BASE=window.location.origin;\n'
             '  window.fetch=new Proxy(window.fetch,{apply:async function(t,s,a){\n'
-            '    var url=a[0],opts=a[1]||{};\n'
+            '    var url=a[0],opts=Object.assign({},a[1]||{});\n'
             '    if(typeof url==="string"&&url.includes("api.openai.com")){\n'
-            '      url=url.replace("https://api.openai.com","https://localhost:8443/api/llm/"+P);\n'
-            '      if(!opts.headers)opts.headers={};\n'
+            '      opts.headers=Object.assign({},opts.headers||{});\n'
             '      opts.headers.authorization="Bearer nexus-proxy";\n'
+            '      /* images/generations → Pollinations flux via Bifrost image proxy */\n'
+            '      if(url.includes("images/generations")){\n'
+            '        var body={};\n'
+            '        try{body=JSON.parse(opts.body||"{}");}catch(e){}\n'
+            '        var prompt=encodeURIComponent(body.prompt||"");\n'
+            '        var sz=(body.size||"1024x1024").split("x");\n'
+            '        var imgUrl=BASE+"/api/pollinations/image"\n'
+            '          +"?prompt="+prompt+"&model=flux"\n'
+            '          +"&width="+(sz[0]||1024)+"&height="+(sz[1]||1024);\n'
+            '        return fetch(imgUrl).then(async function(r){\n'
+            '          var blob=await r.blob();\n'
+            '          var dataUrl=await new Promise(function(res){\n'
+            '            var fr=new FileReader();fr.onload=function(){res(fr.result);};\n'
+            '            fr.readAsDataURL(blob);\n'
+            '          });\n'
+            '          var payload=JSON.stringify({created:Date.now(),data:[{url:dataUrl}]});\n'
+            '          return new Response(payload,{status:200,headers:{"Content-Type":"application/json"}});\n'
+            '        });\n'
+            '      }\n'
+            '      /* chat/completions → Pollinations openai model */\n'
+            '      url=BASE+"/api/llm/pollinations/v1"+url.replace(/^https?:\\/\\/[^\\/]+/,"");\n'
             '      if(opts.body){try{\n'
             '        var b=JSON.parse(opts.body);\n'
-            '        /* model name kept as-is so OC modelNameToModelType lookup still works */\n'
-            '        /* proxy translates gpt-* → groq/compound server-side */\n'
+            '        b.model="openai";\n'
             '        opts.body=JSON.stringify(b);\n'
             '      }catch(e){}}\n'
             '      a=[url,opts,...a.slice(2)];\n'
@@ -1459,6 +1617,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._nexus_ncm_status()
         if sub.startswith("ncm/action") and self.command == "POST":
             return self._nexus_ncm_action()
+        if sub.startswith("governor"):
+            return self._nexus_governor(sub[len("governor"):].lstrip("/"))
+        if sub.startswith("tasks"):
+            return self._nexus_tasks(sub[len("tasks"):].lstrip("/"))
         return self._json({"error": f"unknown nexus API route: {path}"}, 404)
 
     # ── Whitelisted exec endpoint ─────────────────────────────────────────────
@@ -1753,6 +1915,225 @@ class Handler(BaseHTTPRequestHandler):
 
         self._json(result)
 
+    # ── Governor API ──────────────────────────────────────────────────────────
+
+    def _nexus_governor(self, sub):
+        """
+        GET  /api/nexus/governor/status           — current resource snapshot
+        GET  /api/nexus/governor/presets          — list all presets
+        POST /api/nexus/governor/set              — {process, preset} set preset for a process
+        GET  /api/nexus/governor/log              — last 50 log lines
+        POST /api/nexus/governor/kill             — {pid, reason} SIGTERM a pid
+        """
+        import subprocess, sys as _sys, json as _json, re as _re, signal as _sig
+
+        gov_py = Path.home() / "NeXuS" / "projects" / "governor" / "nexus_governor.py"
+        python  = Path.home() / ".venv" / "nexus-mcp" / "bin" / "python"
+        if not python.is_file():
+            python = Path("/usr/bin/python3")
+
+        def _run(*args, timeout=6):
+            r = subprocess.run([str(python), str(gov_py)] + list(args),
+                               capture_output=True, text=True, timeout=timeout)
+            return r.stdout.strip(), r.returncode
+
+        # ── status ──────────────────────────────────────────────────────────────
+        if sub in ("status", "status/", ""):
+            try:
+                import importlib.util, time, os
+                spec = importlib.util.spec_from_file_location("nexus_governor", str(gov_py))
+                mod  = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                gov  = mod.Governor("bridge-api", preset="balanced")
+                r    = gov.check("bridge-status-poll")
+                # also grab /proc/meminfo for swap
+                swap_total = swap_free = 0
+                try:
+                    for line in open("/proc/meminfo"):
+                        if line.startswith("SwapTotal:"): swap_total = int(line.split()[1])
+                        if line.startswith("SwapFree:"):  swap_free  = int(line.split()[1])
+                except Exception: pass
+                swap_used_pct = 0.0
+                if swap_total > 0:
+                    swap_used_pct = round((1 - swap_free / swap_total) * 100, 1)
+                r["swap_pct"] = swap_used_pct
+                r["swap_total_mb"] = round(swap_total / 1024)
+                r["swap_free_mb"]  = round(swap_free  / 1024)
+                r["ts"] = time.time()
+                return self._json(r)
+            except Exception as exc:
+                return self._json({"error": str(exc)}, 500)
+
+        # ── presets ─────────────────────────────────────────────────────────────
+        if sub in ("presets", "presets/"):
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("nexus_governor", str(gov_py))
+                mod  = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                out = {}
+                for name, p in mod.PRESETS.items():
+                    out[name] = {
+                        "label":       p.get("label", name),
+                        "frees_for":   p.get("frees_for", ""),
+                        "tau_cpu":     p.get("tau_cpu", 80),
+                        "tau_ram":     p.get("tau_ram", 80),
+                    }
+                return self._json({"presets": out})
+            except Exception as exc:
+                return self._json({"error": str(exc)}, 500)
+
+        # ── set preset ──────────────────────────────────────────────────────────
+        if sub in ("set", "set/") and self.command == "POST":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = _json.loads(self.rfile.read(length).decode()) if length else {}
+            proc   = _re.sub(r"[^a-zA-Z0-9_.\-]", "", str(body.get("process", "")))[:64]
+            preset = _re.sub(r"[^a-zA-Z0-9_.\-]", "", str(body.get("preset", "")))[:32]
+            if not proc or not preset:
+                return self._json({"error": "process and preset required"}, 400)
+            try:
+                out, code = _run("set", proc, preset)
+                return self._json({"ok": code == 0, "output": out})
+            except Exception as exc:
+                return self._json({"error": str(exc)}, 500)
+
+        # ── log ─────────────────────────────────────────────────────────────────
+        if sub in ("log", "log/"):
+            log_path = Path.home() / "NeXuS" / "projects" / "governor" / "governor.jsonl"
+            if not log_path.is_file():
+                return self._json({"lines": []})
+            try:
+                lines = log_path.read_text().splitlines()[-50:]
+                entries = []
+                for ln in lines:
+                    try: entries.append(_json.loads(ln))
+                    except: entries.append({"raw": ln})
+                return self._json({"lines": entries})
+            except Exception as exc:
+                return self._json({"error": str(exc)}, 500)
+
+        # ── kill ────────────────────────────────────────────────────────────────
+        if sub in ("kill", "kill/") and self.command == "POST":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = _json.loads(self.rfile.read(length).decode()) if length else {}
+            try:
+                pid    = int(body.get("pid", 0))
+                reason = str(body.get("reason", "governor-kill"))[:128]
+            except Exception:
+                return self._json({"error": "invalid pid"}, 400)
+            if pid <= 1:
+                return self._json({"error": "invalid pid"}, 400)
+            try:
+                import os as _os
+                _os.kill(pid, _sig.SIGTERM)
+                return self._json({"ok": True, "pid": pid, "signal": "SIGTERM"})
+            except ProcessLookupError:
+                return self._json({"error": f"pid {pid} not found"}, 404)
+            except PermissionError:
+                return self._json({"error": f"no permission to kill {pid}"}, 403)
+
+        return self._json({"error": f"unknown governor sub-route: {sub}"}, 404)
+
+    # ── Taskwarrior API ───────────────────────────────────────────────────────
+
+    def _nexus_tasks(self, sub):
+        """
+        GET  /api/nexus/tasks                      — list pending tasks (all projects)
+        GET  /api/nexus/tasks?project=nexus.vault  — filter by project
+        GET  /api/nexus/tasks?status=completed     — filter by status
+        GET  /api/nexus/tasks/projects             — list projects + counts
+        POST /api/nexus/tasks          {description, project, priority, due}  — add task
+        POST /api/nexus/tasks/done     {id}                                   — complete task
+        POST /api/nexus/tasks/delete   {id}                                   — delete task
+        """
+        import subprocess, json as _json, urllib.parse as _up
+
+        def _task(*args, export=False):
+            cmd = ["task"] + list(args)
+            if export:
+                cmd.append("export")
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            return r.stdout.strip(), r.returncode
+
+        parsed = _up.urlparse(self.path)
+        params = _up.parse_qs(parsed.query)
+
+        # ── GET /api/nexus/tasks/projects ─────────────────────────────────────
+        if sub == "projects" and self.command == "GET":
+            out, _ = _task("_projects", export=False)
+            projects = [p.strip() for p in out.splitlines() if p.strip()]
+            result = []
+            for proj in projects:
+                count_out, _ = _task(f"project:{proj}", "status:pending", "count", export=False)
+                result.append({"project": proj, "pending": int(count_out.strip() or 0)})
+            return self._json({"projects": result})
+
+        # ── GET /api/nexus/tasks ──────────────────────────────────────────────
+        if self.command == "GET":
+            filters = []
+            project = params.get("project", [""])[0].strip()
+            status  = params.get("status",  ["pending"])[0].strip()
+            if project:
+                import re as _re
+                if not _re.match(r'^[a-zA-Z0-9._\-]{1,64}$', project):
+                    return self._json({"error": "invalid project"}, 400)
+                filters.append(f"project:{project}")
+            filters.append(f"status:{status}")
+            out, _ = _task(*filters, export=True)
+            try:
+                tasks = _json.loads(out) if out else []
+            except Exception:
+                tasks = []
+            # Trim internal fields for the response
+            safe_keys = {"id", "uuid", "description", "project", "priority",
+                         "status", "due", "entry", "modified", "tags", "fossil"}
+            slim = [{k: v for k, v in t.items() if k in safe_keys} for t in tasks]
+            return self._json({"tasks": slim, "count": len(slim)})
+
+        # ── POST endpoints ────────────────────────────────────────────────────
+        if self.command == "POST":
+            length = int(self.headers.get("Content-Length", 0))
+            body = _json.loads(self.rfile.read(length)) if length else {}
+
+            # POST /api/nexus/tasks/done
+            if sub == "done":
+                task_id = str(body.get("id", "")).strip()
+                if not task_id or not task_id.isdigit():
+                    return self._json({"error": "id required (numeric)"}, 400)
+                out, rc = _task(task_id, "done", export=False)
+                return self._json({"ok": rc == 0, "output": out})
+
+            # POST /api/nexus/tasks/delete
+            if sub == "delete":
+                task_id = str(body.get("id", "")).strip()
+                if not task_id or not task_id.isdigit():
+                    return self._json({"error": "id required (numeric)"}, 400)
+                out, rc = _task(task_id, "delete", "rc.confirmation:no", export=False)
+                return self._json({"ok": rc == 0, "output": out})
+
+            # POST /api/nexus/tasks  — add
+            if sub == "":
+                desc = body.get("description", "").strip()
+                if not desc:
+                    return self._json({"error": "description required"}, 400)
+                import re as _re
+                args = ["add"]
+                project = body.get("project", "nexus").strip()
+                if not _re.match(r'^[a-zA-Z0-9._\-]{1,64}$', project):
+                    return self._json({"error": "invalid project"}, 400)
+                args += [f"project:{project}"]
+                priority = body.get("priority", "M").strip().upper()
+                if priority in ("H", "M", "L"):
+                    args += [f"priority:{priority}"]
+                due = body.get("due", "").strip()
+                if due and _re.match(r'^\d{4}-\d{2}-\d{2}$', due):
+                    args += [f"due:{due}"]
+                args.append(desc)
+                out, rc = _task(*args, export=False)
+                return self._json({"ok": rc == 0, "output": out})
+
+        return self._json({"error": f"unknown tasks sub-route: /{sub}"}, 404)
+
     # ── NCM Network Manager API ───────────────────────────────────────────────
 
     def _nexus_ncm_status(self):
@@ -2045,6 +2426,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # Guard 1: must come from loopback TCP
         if self.client_address[0] not in ("127.0.0.1", "::1"):
+            self.close_connection = True
             self.send_response(403, "Forbidden")
             self.send_header("Content-Length", "0")
             self.end_headers()
@@ -3122,7 +3504,7 @@ def ensure_gitignore(env_files):
 def main():
     global ROOT, LOCAL_ENV_FILES, APP_REGISTRY
     ap = argparse.ArgumentParser(description="NeXuS portable HTTPS web server")
-    ap.add_argument("--root", default=str(BASE_DIR / "dist"),
+    ap.add_argument("--root", default=str(BASE_DIR.parent / "web"),
                     help="web root directory to serve (default: ./dist)")
     ap.add_argument("--port", type=int, default=8443)
     ap.add_argument("--host", default="0.0.0.0")

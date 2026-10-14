@@ -15,6 +15,8 @@ function showTab(name) {
     const tab   = document.querySelector(`.nav-tab[data-tab="${name}"]`);
     if (panel) panel.classList.add('active');
     if (tab)   tab.classList.add('active');
+    if (name === 'vpn') loadVpn();
+    if (name === 'netcheck') loadNetcheck();
 }
 
 // ── Node info auto-fill ───────────────────────────────────────────────────
@@ -811,4 +813,182 @@ async function toggleOpenSnitch() {
         showNotification('OpenSnitch', `Service ${action}ed`, 'success');
         setTimeout(updateOpenSnitch, 2000);
     } catch (e) { showNotification('Error', `Failed to ${action} OpenSnitch`, 'error'); }
+}
+
+// ── VPN (ProtonVPN + darknet) ───────────────────────────────────────────────
+let vpnKs = false, vpnDn = false;
+
+async function loadVpn() {
+    try {
+        const c = await apiCall('/vpn/configs');
+        const sel = document.getElementById('vpn-server');
+        if (sel && c.servers) {
+            sel.innerHTML = c.servers
+                .map(s => `<option value="${s.name}">${s.proto}  ${s.name}</option>`)
+                .join('');
+        }
+    } catch (e) { /* configs read-only; ignore */ }
+    vpnStatus();
+}
+
+async function vpnStatus() {
+    try {
+        const s = await apiCall('/vpn/status');
+        const out = (s.out || s.err || '—');
+        document.getElementById('vpn-out').textContent = out;
+        const badge = document.getElementById('vpn-status-badge');
+        if (out.includes('🟢'))      { badge.innerHTML = '<span class="pulse">●</span> connected';    badge.className = 'status-badge status-up'; }
+        else if (out.includes('🟡')) { badge.innerHTML = '<span class="pulse">●</span> connecting';   badge.className = 'status-badge status-unknown'; }
+        else                          { badge.innerHTML = '<span class="pulse">●</span> disconnected'; badge.className = 'status-badge status-down'; }
+        vpnKs = out.includes('killswitch: ON');
+        vpnDn = out.includes('darknet: ON');
+        const ipLine = out.split('\n').find(l => l.includes('🌐'));
+        if (ipLine) document.getElementById('vpn-ip').textContent = ipLine.replace('🌐', 'IP:').trim();
+        updateVpnToggles();
+    } catch (e) {
+        document.getElementById('vpn-out').textContent = 'status unavailable (needs doas rule for nexus-vpn.sh)';
+    }
+}
+
+function updateVpnToggles() {
+    const ks = document.getElementById('vpn-ks'); if (ks) ks.textContent = vpnKs ? 'ON' : 'OFF';
+    const dn = document.getElementById('vpn-dn'); if (dn) dn.textContent = vpnDn ? 'ON' : 'OFF';
+}
+
+async function vpnUp() {
+    const name = document.getElementById('vpn-server').value;
+    if (!name) return;
+    showNotification('VPN', `Connecting ${name}…`, 'info');
+    try {
+        const r = await apiCall(`/vpn/up/${encodeURIComponent(name)}`, { method: 'POST' });
+        showNotification('VPN', r.out || r.err || 'done', r.ok ? 'success' : 'error');
+    } catch (e) { showNotification('VPN', 'connect failed', 'error'); }
+    setTimeout(vpnStatus, 2500);
+}
+
+async function vpnDown() {
+    try {
+        const r = await apiCall('/vpn/down', { method: 'POST' });
+        showNotification('VPN', r.out || 'disconnected', 'info');
+    } catch (e) {}
+    setTimeout(vpnStatus, 1500);
+}
+
+async function vpnKillswitch() {
+    const state = vpnKs ? 'off' : 'on';
+    try {
+        const r = await apiCall(`/vpn/killswitch/${state}`, { method: 'POST' });
+        showNotification('Killswitch', r.out || r.err || state, r.ok ? 'success' : 'error');
+    } catch (e) {}
+    setTimeout(vpnStatus, 1200);
+}
+
+async function vpnDarknet() {
+    const state = vpnDn ? 'off' : 'on';
+    try {
+        const r = await apiCall(`/vpn/darknet/${state}`, { method: 'POST' });
+        showNotification('Darknet', r.out || r.err || state, r.ok ? 'success' : 'error');
+    } catch (e) {}
+    setTimeout(vpnStatus, 1500);
+}
+
+// ── Netcheck (network monitor) ──────────────────────────────────────────────
+async function loadNetcheck() {
+    try {
+        const d = await apiCall('/netcheck');
+        if (d.error) return;
+        const g = id => document.getElementById(id);
+        g('nc-ip').textContent   = d.ip || '—';
+        g('nc-loc').textContent  = [d.city, d.region, d.country].filter(x => x && x !== '?').join(', ') || '—';
+        g('nc-org').textContent  = (d.org || '—').replace(/^AS\d+\s*/, '');
+        g('nc-path').textContent = d.path || '—';
+        g('nc-loss').textContent = (d.loss ?? '?') + ' %';
+        g('nc-lat').textContent  = (d.latency ?? '?') + ' ms';
+        g('nc-jit').textContent  = (d.jitter ?? '?') + ' ms';
+        g('nc-act').textContent  = d.active;
+        const loss = +d.loss || 0, lat = +d.latency || 0;
+        let r = 'Excellent';
+        if (loss > 0 || lat > 80) r = 'Good';
+        if (loss >= 3 || lat > 120) r = 'Fair';
+        if (loss >= 10 || lat > 250) r = 'Poor';
+        g('nc-rate').textContent = r;
+        g('nc-ifaces').innerHTML = (d.ifaces || [])
+            .map(i => `${i.if.padEnd(7)} ${i.state.padEnd(8)} ${i.addr || ''}`).join('<br>') || '—';
+    } catch (e) { /* ignore */ }
+}
+async function netcheckSpeed() {
+    const b = document.getElementById('nc-speedbtn');
+    b.textContent = '▶ Testing…'; b.disabled = true;
+    try {
+        const d = await apiCall('/netcheck/speed');
+        document.getElementById('nc-down').textContent = (d.down ?? '—') + ' Mbps';
+        document.getElementById('nc-up').textContent   = (d.up ?? '—') + ' Mbps';
+    } catch (e) {}
+    b.textContent = '▶ Run speed test'; b.disabled = false;
+}
+
+// ── Screen Recorder ───────────────────────────────────────────────────────
+let _srRecording = false;
+
+async function srLoad() {
+    try {
+        const d = await apiCall('/screenrec/status');
+        _srRecording = d.recording;
+        const badge = document.getElementById('sr-rec-badge');
+        const btn   = document.getElementById('sr-recbtn');
+        badge.style.display = d.recording ? 'inline-block' : 'none';
+        if (btn) btn.textContent = d.recording ? '⏹ Stop' : '⏺ Record';
+
+        // Screenshots grid
+        const sg = document.getElementById('sr-shots');
+        sg.innerHTML = (d.screenshots || []).map(f => `
+            <a href="/api/screenrec/file/shot/${encodeURIComponent(f.name)}" target="_blank"
+               style="display:block;border:1px solid var(--border-primary);border-radius:6px;overflow:hidden">
+              <img src="/api/screenrec/file/shot/${encodeURIComponent(f.name)}"
+                   style="width:100%;height:90px;object-fit:cover;display:block" loading="lazy" />
+              <div style="font-size:.65rem;padding:.25rem .4rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
+            </a>`).join('') || '<p style="color:var(--text-muted);font-size:.8rem">No screenshots yet</p>';
+
+        // Recordings list
+        const rg = document.getElementById('sr-recs');
+        rg.innerHTML = (d.recordings || []).map(f => `
+            <div style="border:1px solid var(--border-primary);border-radius:6px;padding:.5rem">
+              <video src="/api/screenrec/file/rec/${encodeURIComponent(f.name)}" controls
+                     style="width:100%;border-radius:4px;margin-bottom:.3rem"></video>
+              <div style="font-size:.65rem;color:var(--text-muted)">${f.name}</div>
+            </div>`).join('') || '<p style="color:var(--text-muted);font-size:.8rem">No recordings yet</p>';
+    } catch (e) {
+        document.getElementById('sr-msg').textContent = 'screenrec API offline';
+    }
+}
+
+function srMsg(txt, ok=true) {
+    const el = document.getElementById('sr-msg');
+    el.style.color = ok ? 'var(--accent-primary)' : '#f38ba8';
+    el.textContent = txt;
+    setTimeout(() => { el.textContent = ''; }, 3000);
+}
+
+async function srShot() {
+    try {
+        const d = await apiCall('/screenrec/shot', 'POST');
+        srMsg(d.ok ? '📸 Screenshot saved' : `Error: ${d.err}`, d.ok);
+        setTimeout(srLoad, 800);
+    } catch (e) { srMsg('Shot failed', false); }
+}
+
+async function srToggleRec() {
+    try {
+        const ep = _srRecording ? '/screenrec/rec/stop' : '/screenrec/rec/start';
+        const d  = await apiCall(ep, 'POST');
+        srMsg(d.ok ? (_srRecording ? '⏹ Stopped' : '⏺ Recording started') : `Error: ${d.err}`, d.ok);
+        setTimeout(srLoad, 600);
+    } catch (e) { srMsg('Failed', false); }
+}
+
+async function srAudio(state) {
+    try {
+        const d = await apiCall(`/screenrec/audio/${state}`, 'POST');
+        srMsg(d.ok ? `Audio ${state}` : `Error: ${d.err}`, d.ok);
+    } catch (e) { srMsg('Audio toggle failed', false); }
 }

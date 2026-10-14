@@ -1,9 +1,16 @@
 *.bak*
 __pycache__/
 *.pyc
-certs/key.pem
+*.pem
+*.key
+certs/
 .active-theme
 *.log
+*.fossil
 web/static/hljs/styles/
 web/static/hljs/languages/
 web/static/hljs/highlight.min.js
+nexus.env
+.local.env
+*.env
+

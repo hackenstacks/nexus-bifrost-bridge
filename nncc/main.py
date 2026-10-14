@@ -26,6 +26,10 @@ from routers import (
     routing_router,
     traffic_router,
     health_router,
+    vpn_router,
+    netcheck_router,
+    heimdall_router,
+    screenrec_router,
 )
 from services import (
     health_checker,
@@ -119,6 +123,10 @@ app.include_router(networks_router, prefix="/api")
 app.include_router(routing_router, prefix="/api")
 app.include_router(traffic_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
+app.include_router(vpn_router, prefix="/api")
+app.include_router(netcheck_router, prefix="/api")
+app.include_router(heimdall_router, prefix="/api")
+app.include_router(screenrec_router, prefix="/api")
 
 
 # Root endpoint

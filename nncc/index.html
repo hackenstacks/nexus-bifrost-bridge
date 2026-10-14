@@ -102,6 +102,15 @@
             <button class="nav-tab" data-tab="network"  onclick="showTab('network')">
                 <img src="assets/icons/chart-network.svg" alt=""> Network
             </button>
+            <button class="nav-tab" data-tab="vpn"      onclick="showTab('vpn')">
+                🔐 VPN
+            </button>
+            <button class="nav-tab" data-tab="netcheck" onclick="showTab('netcheck')">
+                📡 Netcheck
+            </button>
+            <button class="nav-tab" data-tab="screenrec" onclick="showTab('screenrec'); srLoad()">
+                🎬 Screen
+            </button>
         </nav>
 
         <div class="header-actions">
@@ -704,6 +713,89 @@ NeXuS Node (127.0.0.1)
                 </div>
             </div>
         </div><!-- /tab-network -->
+
+        <!-- ── VPN ─────────────────────────────────────────────────────── -->
+        <div id="tab-vpn" class="tab-panel">
+          <div class="dashboard-grid">
+            <div class="card" style="grid-column: span 2">
+              <div class="card-header">
+                <h2 class="card-title">🔐 ProtonVPN &nbsp;·&nbsp; WireGuard / OpenVPN / Tor</h2>
+                <span id="vpn-status-badge" class="status-badge status-unknown"><span class="pulse">●</span> checking…</span>
+              </div>
+              <div class="card-body">
+                <div id="vpn-ip" style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:var(--spacing-md)">IP: —</div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:var(--spacing-md)">
+                  <select id="vpn-server" style="flex:1; min-width:220px; padding:6px; background:var(--bg-primary); color:var(--text-primary); border:1px solid var(--border-primary); border-radius:var(--radius-sm)"></select>
+                  <button class="btn" onclick="vpnUp()">Connect</button>
+                  <button class="btn btn-secondary" onclick="vpnDown()">Disconnect</button>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:var(--spacing-md)">
+                  <button class="btn btn-secondary" onclick="vpnKillswitch()">🛡 Killswitch: <span id="vpn-ks">?</span></button>
+                  <button class="btn btn-secondary" onclick="vpnDarknet()">🧅 Darknet: <span id="vpn-dn">?</span></button>
+                  <button class="btn btn-secondary" onclick="loadVpn()">↻ Refresh</button>
+                </div>
+                <pre id="vpn-out" style="background:var(--bg-primary); padding:var(--spacing-sm); border-radius:var(--radius-sm); font-size:0.72rem; overflow-x:auto; white-space:pre-wrap; margin:0">—</pre>
+                <div style="font-size:0.7rem; color:var(--text-muted); margin-top:var(--spacing-sm)">Connect / killswitch / darknet require a passwordless doas rule for nexus-vpn.sh on this host.</div>
+              </div>
+            </div>
+          </div>
+        </div><!-- /tab-vpn -->
+
+        <!-- ── Netcheck ─────────────────────────────────────────────────── -->
+        <div id="tab-netcheck" class="tab-panel">
+          <div class="dashboard-grid">
+            <div class="card">
+              <div class="card-header"><h2 class="card-title">📡 Uplink</h2></div>
+              <div class="card-body">
+                <div class="row"><span class="k">Public IP</span><span class="val" id="nc-ip">—</span></div>
+                <div class="row"><span class="k">Location</span><span class="val" id="nc-loc">—</span></div>
+                <div class="row"><span class="k">Carrier</span><span class="val" id="nc-org">—</span></div>
+                <div class="row"><span class="k">Path</span><span class="val" id="nc-path">—</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><h2 class="card-title">📶 Reliability</h2></div>
+              <div class="card-body">
+                <div class="row"><span class="k">Packet loss</span><span class="val" id="nc-loss">—</span></div>
+                <div class="row"><span class="k">Latency</span><span class="val" id="nc-lat">—</span></div>
+                <div class="row"><span class="k">Jitter</span><span class="val" id="nc-jit">—</span></div>
+                <div class="row"><span class="k">Rating</span><span class="val" id="nc-rate">—</span></div>
+                <div class="row"><span class="k">Active conns</span><span class="val" id="nc-act">—</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><h2 class="card-title">⚡ Throughput</h2></div>
+              <div class="card-body">
+                <div class="row"><span class="k">Down</span><span class="val" id="nc-down">—</span></div>
+                <div class="row"><span class="k">Up</span><span class="val" id="nc-up">—</span></div>
+                <button class="btn" id="nc-speedbtn" style="margin-top:.6rem" onclick="netcheckSpeed()">▶ Run speed test</button>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><h2 class="card-title">🧩 Interfaces</h2></div>
+              <div class="card-body"><div id="nc-ifaces" style="font-family:monospace;font-size:.78rem">—</div></div>
+            </div>
+          </div>
+        </div><!-- /tab-netcheck -->
+
+        <!-- ── Screen Recorder ───────────────────────────────────────── -->
+        <div id="tab-screenrec" class="tab-panel">
+          <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
+            <span id="sr-rec-badge" style="display:none;background:#f38ba8;color:#1e1e2e;font-size:.7rem;font-weight:700;padding:.2rem .6rem;border-radius:999px">● REC</span>
+            <button class="btn" onclick="srShot()">📸 Screenshot</button>
+            <button class="btn" id="sr-recbtn" onclick="srToggleRec()">⏺ Record</button>
+            <button class="btn" onclick="srAudio('on')">🔊 Audio On</button>
+            <button class="btn" onclick="srAudio('off')">🔇 Audio Off</button>
+            <button class="btn" onclick="srLoad()" style="margin-left:auto">↻ Refresh</button>
+          </div>
+          <p id="sr-msg" style="font-size:.8rem;color:var(--accent-primary);min-height:1.2rem;margin-bottom:.8rem"></p>
+
+          <h4 style="font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-bottom:.5rem">Recent Screenshots</h4>
+          <div id="sr-shots" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.6rem;margin-bottom:1.2rem"></div>
+
+          <h4 style="font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-bottom:.5rem">Recent Recordings</h4>
+          <div id="sr-recs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem"></div>
+        </div><!-- /tab-screenrec -->
 
     </main>
 

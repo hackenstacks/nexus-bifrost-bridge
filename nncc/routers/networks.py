@@ -3,6 +3,7 @@ NeXuS Command Center - Networks API Router
 Endpoints for network status and control
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException
 from typing import List
 
@@ -22,38 +23,24 @@ router = APIRouter(prefix="/networks", tags=["networks"])
 
 @router.get("", response_model=List[Network])
 async def list_networks():
-    """
-    List all configured networks with their current status.
+    """List all configured networks with current status — parallel container checks."""
 
-    Returns a list of all anonymity networks (Tor, I2P, Yggdrasil, etc.)
-    with their health status, container info, and traffic statistics.
-    """
-    networks = []
-
-    for network_id, config in settings.networks.items():
-        # Get container statuses
+    async def _build_network(network_id, config):
         containers = await container_service.get_network_containers(network_id)
-
-        # Get health status
         health = health_checker.get_health(network_id)
-
-        # Calculate aggregate status
         running_containers = sum(1 for c in containers if c.running)
         total_containers = len(config.get("containers", []))
-
         if total_containers == 0:
-            status = NetworkStatus.UP  # No containers to manage (like 'direct')
+            status = NetworkStatus.UP
         elif running_containers == 0:
             status = NetworkStatus.DOWN
         elif running_containers < total_containers:
             status = NetworkStatus.DEGRADED
         else:
             status = NetworkStatus.UP
-
         if health and health.status != NetworkStatus.UNKNOWN:
             status = health.status
-
-        networks.append(Network(
+        return Network(
             id=network_id,
             name=config.get("name", network_id),
             icon=config.get("icon", "🌐"),
@@ -62,7 +49,11 @@ async def list_networks():
             health=health,
             containers=containers,
             latency_ms=health.latency_ms if health else None,
-        ))
+        )
+
+    networks = await asyncio.gather(
+        *[_build_network(nid, cfg) for nid, cfg in settings.networks.items()]
+    )
 
     return networks
 

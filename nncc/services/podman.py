@@ -24,7 +24,7 @@ class PodmanCLIService:
         self.runtime = "podman-cli"
         logger.info("Using Podman CLI for container management")
 
-    async def _run_command(self, cmd: List[str], timeout: int = 10) -> tuple[bool, str, str]:
+    async def _run_command(self, cmd: List[str], timeout: int = 2) -> tuple[bool, str, str]:
         """Run podman command and return (success, stdout, stderr)"""
         try:
             proc = await asyncio.create_subprocess_exec(

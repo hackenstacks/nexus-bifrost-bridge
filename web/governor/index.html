@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeXuS Governor</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --surface2:#1c2333;
+    --border:  #30363d;
+    --text:    #c9d1d9;
+    --muted:   #6e7681;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --neon:    #39d353;
+    --radius:  6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+  header {
+    padding: 14px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px;
+    position: sticky; top: 0; z-index: 20;
+  }
+  .logo { font-family: monospace; font-size: 15px; font-weight: 800; color: var(--neon); letter-spacing: 2px; }
+  .back-btn { color: var(--muted); text-decoration: none; font-size: 13px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .back-btn:hover { color: var(--text); border-color: var(--blue); }
+  .hdr-title { color: var(--text); font-size: 16px; font-weight: 600; }
+  .hdr-sub { color: var(--muted); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
+  .spacer { flex: 1; }
+  #stateChip { padding: 5px 14px; border-radius: 20px; font-weight: 700; letter-spacing: 1px; font-size: 13px; font-family: monospace; transition: all 0.3s; }
+  .chip-GREEN  { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid var(--green); }
+  .chip-YELLOW { background: rgba(210,153,34,.15); color: var(--yellow); border: 1px solid var(--yellow); box-shadow: 0 0 8px rgba(210,153,34,.3); }
+  .chip-RED    { background: rgba(248,81,73,.15); color: var(--red); border: 1px solid var(--red); box-shadow: 0 0 12px rgba(248,81,73,.4); animation: pulse-red 1s infinite; }
+  @keyframes pulse-red { 0%,100% { box-shadow: 0 0 12px rgba(248,81,73,.4); } 50% { box-shadow: 0 0 24px rgba(248,81,73,.7); } }
+  #scoreVal { font-family: monospace; font-size: 13px; color: var(--muted); }
+
+  main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* ── Metric cards ── */
+  .metrics-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  @media (max-width: 900px) { .metrics-row { grid-template-columns: repeat(2, 1fr); } }
+  .metric-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px; position: relative; overflow: hidden;
+  }
+  .metric-card::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+    background: var(--bar-col, var(--green)); transition: background 0.4s;
+  }
+  .metric-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+  .metric-val { font-family: monospace; font-size: 28px; font-weight: 700; margin: 6px 0 4px; color: var(--val-col, var(--text)); }
+  .metric-sub { color: var(--muted); font-size: 12px; }
+  .metric-bar-wrap { margin-top: 10px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .metric-bar { height: 100%; border-radius: 2px; transition: width 0.5s, background 0.4s; }
+
+  /* ── Controls panel ── */
+  .controls-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+  @media (max-width: 700px) { .controls-row { grid-template-columns: 1fr; } }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+  .panel-title { color: var(--blue); font-size: 13px; font-weight: 700; margin-bottom: 14px; letter-spacing: 0.5px; }
+
+  /* Preset selector */
+  .preset-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  @media (max-width: 900px) { .preset-grid { grid-template-columns: repeat(3, 1fr); } }
+  .preset-btn {
+    padding: 7px 6px; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--muted); font-size: 11px; cursor: pointer;
+    text-align: center; transition: all 0.15s; font-family: inherit;
+  }
+  .preset-btn:hover { border-color: var(--blue); color: var(--text); }
+  .preset-btn.active { border-color: var(--neon); color: var(--neon); background: rgba(57,211,83,0.08); }
+  .preset-desc { color: var(--muted); font-size: 11px; margin-top: 10px; min-height: 16px; }
+
+  /* Log */
+  .log-box { height: 180px; overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 4px; padding: 10px; font-family: monospace; font-size: 11px; }
+  .log-line { padding: 2px 0; border-bottom: 1px solid rgba(48,54,61,0.4); }
+  .log-line:last-child { border: none; }
+  .log-GREEN  { color: var(--green); }
+  .log-YELLOW { color: var(--yellow); }
+  .log-RED    { color: var(--red); }
+  .log-ts     { color: var(--muted); margin-right: 8px; }
+
+  /* Grafana iframe */
+  .grafana-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; margin-bottom: 18px;
+  }
+  .grafana-header { padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .grafana-title { color: var(--blue); font-size: 13px; font-weight: 700; }
+  .grafana-link { color: var(--muted); font-size: 11px; text-decoration: none; margin-left: auto; }
+  .grafana-link:hover { color: var(--text); }
+  iframe.grafana { width: 100%; height: 420px; border: none; display: block; }
+
+  /* Refresh controls */
+  .refresh-row { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; }
+  .refresh-row label { color: var(--muted); font-size: 12px; }
+  select.small { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: 4px; font-family: inherit; font-size: 12px; cursor: pointer; }
+  #lastRefresh { color: var(--muted); font-size: 11px; margin-left: auto; }
+
+  /* Zone legend */
+  .zone-legend { display: flex; gap: 16px; align-items: center; }
+  .zone-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+  .zone-item { font-size: 11px; color: var(--muted); display: flex; align-items: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="back-btn">← Hub</a>
+  <div>
+    <div class="logo">NeXuS</div>
+    <div class="hdr-sub">Governor · Resource Manager</div>
+  </div>
+  <div class="hdr-title" style="margin-left:8px;">System Governor</div>
+  <div class="spacer"></div>
+  <span id="scoreVal">score: —</span>&nbsp;
+  <span id="stateChip" class="chip-GREEN">⬡ GREEN</span>
+</header>
+
+<main>
+
+  <!-- ── Refresh controls ── -->
+  <div class="refresh-row">
+    <label>Auto-refresh:</label>
+    <select class="small" id="refreshRate" onchange="setRefresh(+this.value)">
+      <option value="2000">2s</option>
+      <option value="5000" selected>5s</option>
+      <option value="10000">10s</option>
+      <option value="30000">30s</option>
+      <option value="0">Off</option>
+    </select>
+    <div class="zone-legend">
+      <div class="zone-item"><span class="zone-dot" style="background:var(--green)"></span>GREEN &lt;0.80 · Machine reserve (10%) always protected</div>
+      <div class="zone-item"><span class="zone-dot" style="background:var(--yellow)"></span>YELLOW 0.80–1.0 · throttle</div>
+      <div class="zone-item"><span class="zone-dot" style="background:var(--red)"></span>RED ≥1.0 · halt+recover</div>
+    </div>
+    <span id="lastRefresh">—</span>
+  </div>
+
+  <!-- ── Metric cards ── -->
+  <div class="metrics-row">
+    <div class="metric-card" id="card-cpu">
+      <div class="metric-label">CPU</div>
+      <div class="metric-val" id="val-cpu">—</div>
+      <div class="metric-sub" id="sub-cpu">effective ceiling 90%</div>
+      <div class="metric-bar-wrap"><div class="metric-bar" id="bar-cpu" style="width:0%"></div></div>
+    </div>
+    <div class="metric-card" id="card-ram">
+      <div class="metric-label">RAM</div>
+      <div class="metric-val" id="val-ram">—</div>
+      <div class="metric-sub" id="sub-ram">effective ceiling 90%</div>
+      <div class="metric-bar-wrap"><div class="metric-bar" id="bar-ram" style="width:0%"></div></div>
+    </div>
+    <div class="metric-card" id="card-swap">
+      <div class="metric-label">Swap</div>
+      <div class="metric-val" id="val-swap">—</div>
+      <div class="metric-sub" id="sub-swap">—</div>
+      <div class="metric-bar-wrap"><div class="metric-bar" id="bar-swap" style="width:0%;background:var(--yellow)"></div></div>
+    </div>
+    <div class="metric-card" id="card-score">
+      <div class="metric-label">Governor Score</div>
+      <div class="metric-val" id="val-score">—</div>
+      <div class="metric-sub" id="sub-score">driver: —</div>
+      <div class="metric-bar-wrap"><div class="metric-bar" id="bar-score" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- ── Controls ── -->
+  <div class="controls-row">
+    <!-- Preset selector -->
+    <div class="panel">
+      <div class="panel-title">⚙ Preset</div>
+      <div class="preset-grid" id="presetGrid">
+        <!-- populated by JS -->
+      </div>
+      <div class="preset-desc" id="presetDesc">Select a preset to assign resources</div>
+    </div>
+
+    <!-- Log -->
+    <div class="panel">
+      <div class="panel-title" style="display:flex;align-items:center;gap:10px;">
+        📋 Governor Log
+        <button onclick="loadLog()" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:3px 10px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:11px;">↻ Refresh</button>
+      </div>
+      <div class="log-box" id="logBox">Loading…</div>
+    </div>
+  </div>
+
+  <!-- ── Grafana embed ── -->
+  <div class="grafana-wrap">
+    <div class="grafana-header">
+      <span class="grafana-title">📊 Grafana — NeXuS Governor</span>
+      <a href="/grafana/d/nexus-governor/nexus-governor" target="_blank" class="grafana-link">Open full dashboard ↗</a>
+    </div>
+    <iframe class="grafana"
+      id="grafanaFrame"
+      src="/grafana/d/nexus-governor/nexus-governor?orgId=1&theme=dark&kiosk=tv&refresh=5s"
+      allowfullscreen>
+    </iframe>
+  </div>
+
+</main>
+
+<script>
+const PRESETS_META = {};
+let _refreshTimer = null;
+let _activePreset = null;
+
+// ── Status polling ────────────────────────────────────────────────────────────
+
+function colorFor(score) {
+  if (score >= 1.0) return 'var(--red)';
+  if (score >= 0.8) return 'var(--yellow)';
+  return 'var(--green)';
+}
+
+function pct(v, max=100) { return Math.min(v/max*100, 100).toFixed(1); }
+
+async function fetchStatus() {
+  try {
+    const r = await fetch('/api/nexus/governor/status');
+    const d = await r.json();
+    if (d.error) { console.warn('gov status:', d.error); return; }
+
+    const score  = d.score ?? 0;
+    const state  = d.state ?? 'GREEN';
+    const scores = d.scores ?? {};
+    const cpu    = scores.cpu ?? 0;
+    const ram    = scores.ram ?? 0;
+
+    // Header chip
+    const chip = document.getElementById('stateChip');
+    chip.textContent = `⬡ ${state}`;
+    chip.className   = `chip-${state}`;
+    document.getElementById('scoreVal').textContent = `score: ${score.toFixed(3)}`;
+
+    // CPU card
+    const cpuPct = cpu * 90;
+    setCard('cpu', cpuPct.toFixed(1)+'%', `score ${cpu.toFixed(3)}  ·  ceiling 90%`, cpu, 1.0);
+
+    // RAM card
+    const ramPct = ram * 90;
+    setCard('ram', ramPct.toFixed(1)+'%', `score ${ram.toFixed(3)}  ·  ceiling 90%`, ram, 1.0);
+
+    // Swap card (raw pct, not governor-scored)
+    const swapPct = d.swap_pct ?? 0;
+    const swapCol = swapPct >= 80 ? 'var(--red)' : swapPct >= 60 ? 'var(--yellow)' : 'var(--green)';
+    document.getElementById('val-swap').textContent  = swapPct.toFixed(1) + '%';
+    document.getElementById('sub-swap').textContent  = `${d.swap_free_mb ?? '?'} MB free of ${d.swap_total_mb ?? '?'} MB`;
+    document.getElementById('bar-swap').style.width  = pct(swapPct) + '%';
+    document.getElementById('bar-swap').style.background = swapCol;
+
+    // Score card
+    const driver = d.driver ?? '—';
+    setCard('score', score.toFixed(3), `driver: ${driver}`, score, 1.0, true);
+    document.getElementById('bar-score').style.maxWidth = '100%';
+
+    document.getElementById('lastRefresh').textContent = 'updated ' + new Date().toLocaleTimeString();
+  } catch(e) { console.error('governor status failed:', e); }
+}
+
+function setCard(id, valText, subText, score, max, isScore=false) {
+  const col = colorFor(score);
+  document.getElementById(`val-${id}`).textContent    = valText;
+  document.getElementById(`val-${id}`).style.color    = col;
+  document.getElementById(`sub-${id}`).textContent    = subText;
+  document.getElementById(`bar-${id}`).style.width    = Math.min(score/max*100, 100) + '%';
+  document.getElementById(`bar-${id}`).style.background = col;
+  document.getElementById(`card-${id}`).style.setProperty('--bar-col', col);
+}
+
+// ── Presets ───────────────────────────────────────────────────────────────────
+
+async function loadPresets() {
+  try {
+    const r = await fetch('/api/nexus/governor/presets');
+    const d = await r.json();
+    const grid = document.getElementById('presetGrid');
+    grid.innerHTML = '';
+    for (const [name, p] of Object.entries(d.presets || {})) {
+      PRESETS_META[name] = p;
+      const btn = document.createElement('button');
+      btn.className    = 'preset-btn';
+      btn.textContent  = name;
+      btn.title        = p.frees_for || p.label || name;
+      btn.dataset.name = name;
+      btn.onclick      = () => applyPreset(name);
+      grid.appendChild(btn);
+    }
+  } catch(e) { console.error('presets failed:', e); }
+}
+
+async function applyPreset(name) {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector(`.preset-btn[data-name="${name}"]`);
+  if (btn) btn.classList.add('active');
+  _activePreset = name;
+  const p = PRESETS_META[name] || {};
+  document.getElementById('presetDesc').textContent =
+    `${p.label || name}${p.frees_for ? '  ·  frees for: ' + p.frees_for : ''}  ·  CPU≤${p.tau_cpu}%  RAM≤${p.tau_ram}%`;
+  try {
+    await fetch('/api/nexus/governor/set', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({process: 'global', preset: name})
+    });
+    await fetchStatus();
+  } catch(e) { console.error('set preset failed:', e); }
+}
+
+// ── Log ───────────────────────────────────────────────────────────────────────
+
+async function loadLog() {
+  try {
+    const r = await fetch('/api/nexus/governor/log');
+    const d = await r.json();
+    const box = document.getElementById('logBox');
+    const lines = (d.lines || []).reverse();
+    if (!lines.length) { box.textContent = 'No log entries.'; return; }
+    box.innerHTML = lines.map(l => {
+      const state = l.state || '';
+      const ts    = l.ts ? new Date(l.ts*1000).toLocaleTimeString() : '';
+      const msg   = l.event || l.context || l.raw || JSON.stringify(l);
+      return `<div class="log-line log-${state}"><span class="log-ts">${ts}</span>${state ? `<strong>[${state}]</strong> ` : ''}${msg}</div>`;
+    }).join('');
+  } catch(e) { document.getElementById('logBox').textContent = 'Error loading log.'; }
+}
+
+// ── Refresh control ───────────────────────────────────────────────────────────
+
+function setRefresh(ms) {
+  clearInterval(_refreshTimer);
+  if (ms > 0) _refreshTimer = setInterval(fetchStatus, ms);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+window.addEventListener('load', async () => {
+  await Promise.all([fetchStatus(), loadPresets(), loadLog()]);
+  setRefresh(5000);
+});
+</script>
+</body>
+</html>

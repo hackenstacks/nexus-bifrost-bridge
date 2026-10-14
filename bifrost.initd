@@ -1,0 +1,33 @@
+#!/sbin/openrc-run
+# Bifrost Bridge — NeXuS HTTPS proxy + web server
+# Install: doas cp bifrost.initd /etc/init.d/bifrost && doas chmod +x /etc/init.d/bifrost
+# Enable:  doas rc-update add bifrost default
+# hackenstacks@protonmail.com
+
+description="NeXuS Bifrost Bridge HTTPS proxy"
+
+NEXUS_HOME="${NEXUS_HOME:-/home/user/NeXuS}"
+BIFROST_DIR="${BIFROST_DIR:-${NEXUS_HOME}/bifrost-bridge}"
+BIFROST_USER="${BIFROST_USER:-user}"
+BIFROST_PORT="${BIFROST_PORT:-8443}"
+BIFROST_ROOT="${BIFROST_ROOT:-${BIFROST_DIR}/web}"
+BIFROST_LOG="${BIFROST_LOG:-/var/log/bifrost.log}"
+PIDFILE="/var/run/bifrost.pid"
+
+command="/usr/bin/python3"
+command_args="${BIFROST_DIR}/server/nexus_web_server.py --root ${BIFROST_ROOT} --port ${BIFROST_PORT}"
+command_user="${BIFROST_USER}"
+command_background=true
+pidfile="${PIDFILE}"
+output_log="${BIFROST_LOG}"
+error_log="${BIFROST_LOG}"
+
+depend() {
+    need net
+    after firewall
+}
+
+start_pre() {
+    checkpath --directory --owner ${BIFROST_USER} /var/run
+    checkpath --file --owner ${BIFROST_USER} --mode 0644 "${BIFROST_LOG}" || true
+}

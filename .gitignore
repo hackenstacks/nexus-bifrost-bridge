@@ -7,6 +7,8 @@ certs/
 .active-theme
 *.log
 *.fossil
+*.mp4
+*.mov
 web/static/hljs/styles/
 web/static/hljs/languages/
 web/static/hljs/highlight.min.js

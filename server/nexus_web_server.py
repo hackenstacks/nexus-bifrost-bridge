@@ -125,6 +125,34 @@ POLLI_BASE = "https://gen.pollinations.ai"
 UA = "nexus-web-server"
 LLM_PATH_RE = re.compile(r"^/api/llm/([A-Za-z0-9_.-]+)/(?:v1/)?chat/completions/?$")
 
+# ── Pollinations live model cache ─────────────────────────────────────────────
+# Fetched once per hour so model-name changes (like the Oct-2026 rename) auto-heal.
+_POLLI_MODEL_CACHE: dict = {"ts": 0.0, "ids": [], "default": "openai/gpt-4o-mini"}
+_POLLI_PREFER = ("openai/gpt-4o-mini", "openai/gpt-4o", "openai/gpt-4-turbo")
+
+def _get_polli_models() -> list:
+    import time as _time
+    now = _time.monotonic()
+    if now - _POLLI_MODEL_CACHE["ts"] < 3600 and _POLLI_MODEL_CACHE["ids"]:
+        return _POLLI_MODEL_CACHE["ids"]
+    try:
+        req = urllib.request.Request(f"{POLLI_BASE}/v1/models",
+                                     headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            ids = [m["id"] for m in json.loads(r.read())["data"]]
+        _POLLI_MODEL_CACHE["ids"] = ids
+        _POLLI_MODEL_CACHE["ts"]  = now
+        best = next((m for m in _POLLI_PREFER if m in ids), ids[0] if ids else "openai/gpt-4o-mini")
+        _POLLI_MODEL_CACHE["default"] = best
+        log(f"[POLLI] refreshed model list ({len(ids)} models, default={best})")
+    except Exception as e:
+        log(f"[POLLI] model list fetch failed: {e} — using cached default")
+    return _POLLI_MODEL_CACHE["ids"]
+
+def _polli_default_model() -> str:
+    _get_polli_models()
+    return _POLLI_MODEL_CACHE["default"]
+
 # ── Charcard backend (nexus_png2_editor.py Flask app) ────────────────────────
 CHARCARD_BACKEND   = os.environ.get("CHARCARD_URL",     "http://127.0.0.1:7420")
 CHARCARD_PREFIX    = "/charcard"
@@ -458,6 +486,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._llm_proxy(provider_from_url=m.group(1))
         if path == "/api/wire":
             return self._wire_app()
+        if path == "/api/tts":
+            return self._tts_proxy()
         if path == "/api/upload/image":
             return self._upload_image()
         if path.startswith("/api/nexus/"):
@@ -652,23 +682,33 @@ class Handler(BaseHTTPRequestHandler):
                 "gpt-4-turbo-preview": "groq/compound", "gpt-4-0125-preview": "groq/compound",
                 "gpt-3.5-turbo": "groq/compound-mini", "gpt-3.5-turbo-16k": "groq/compound-mini",
             },
+            # Pollinations renamed their models (2026-10). Old bare names → new namespaced ones.
+            "pollinations": {
+                "openai":       _polli_default_model(),
+                "openai-fast":  _polli_default_model(),
+                "openai-large": "openai/gpt-5.4-nano",
+                "mistral":      "mistralai/mistral-large-4",
+                "claude":       "anthropic/claude-haiku-5.5",
+                "deepseek":     "deepseek/deepseek-v4.1-flash-1017",
+            },
         }
         _GROQ_NATIVE = {"groq/compound", "groq/compound-mini", "openai/gpt-oss-120b",
                         "openai/gpt-oss-20b", "qwen/qwen3.6-27b", "qwen/qwen3.8-27b"}
         # Inject default model if client didn't specify one
         _DEFAULT_MODELS = {
-            "mistral":    "mistral-small-latest",
-            "openai":     "gpt-4o-mini",
-            "groq":       "groq/compound",
-            "deepseek":   "deepseek-chat",
-            "openrouter": "openai/gpt-4o-mini",
-            "together":   "meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo",
-            "hyperbolic": "meta-llama/Meta-Llama-3.1-8B-Instruct",
-            "cerebras":   "llama3.1-8b",
-            "google":     "gemini-2.0-flash",
-            "grok":       "grok-3-mini",
-            "aichat":     "mistral:magistral-medium-latest",
-            "ollama":     "llama3.2",
+            "mistral":      "mistral-small-latest",
+            "openai":       "gpt-4o-mini",
+            "groq":         "groq/compound",
+            "deepseek":     "deepseek-chat",
+            "openrouter":   "openai/gpt-4o-mini",
+            "together":     "meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo",
+            "hyperbolic":   "meta-llama/Meta-Llama-3.1-8B-Instruct",
+            "cerebras":     "llama3.1-8b",
+            "google":       "gemini-2.0-flash",
+            "grok":         "grok-3-mini",
+            "aichat":       "mistral:magistral-medium-latest",
+            "ollama":       "llama3.2",
+            "pollinations": _polli_default_model(),
         }
         if not payload.get("model") and pid in _DEFAULT_MODELS:
             payload["model"] = _DEFAULT_MODELS[pid]
@@ -677,6 +717,9 @@ class Handler(BaseHTTPRequestHandler):
         translated = _MODEL_XLAT.get(pid, {}).get(m)
         if not translated and pid == "groq" and m not in _GROQ_NATIVE and not m.startswith("whisper"):
             translated = "groq/compound"
+        # Pollinations: any bare name without a '/' is an old pre-rename model — map to live default.
+        if not translated and pid == "pollinations" and m and "/" not in m:
+            translated = _polli_default_model()
         if translated:
             payload["model"] = translated
 
@@ -987,6 +1030,66 @@ class Handler(BaseHTTPRequestHandler):
         ctype = MIME_TYPES.get(target.suffix.lower(), "application/octet-stream")
         self._bytes(target.read_bytes(), ctype, cache="max-age=86400")
 
+    def _tts_proxy(self):
+        """POST /api/tts — text-to-speech proxy.
+
+        Body: {"text": "...", "voice": "nova", "model": "elevenlabs"}
+        Returns: audio/mpeg data (mp3)
+
+        Priority:
+          1. Pollinations /audio/{text}?voice= (requires POLLINATIONS_API_KEY)
+          2. Local flite fallback (installed on NeXuS nodes)
+        """
+        import subprocess, urllib.parse as _up, urllib.request as _ur
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body   = json.loads(self.rfile.read(length)) if length else {}
+        except Exception:
+            return self._json({"error": "invalid JSON body"}, 400)
+
+        text  = str(body.get("text", "")).strip()
+        voice = str(body.get("voice", "nova")).strip() or "nova"
+        model = str(body.get("model", "tts-1-hd")).strip() or "tts-1-hd"
+        if not text:
+            return self._json({"error": "text is required"}, 400)
+
+        # ── 1. Pollinations TTS — POST /v1/audio/speech (OpenAI-compatible) ──────
+        # POST avoids URL length limits that cause GET /audio/{text} to fail on
+        # longer responses.
+        polli_key = load_secret("POLLINATIONS_API_KEY")
+        if polli_key:
+            try:
+                import json as _json
+                url     = f"{POLLI_BASE}/v1/audio/speech"
+                payload = _json.dumps({"model": model, "input": text, "voice": voice}).encode()
+                req     = _ur.Request(url, data=payload, headers={
+                    "Authorization": f"Bearer {polli_key}",
+                    "Content-Type":  "application/json",
+                })
+                with _ur.urlopen(req, timeout=30) as resp:
+                    audio_data = resp.read()
+                self._bytes(audio_data, "audio/mpeg")
+                return
+            except Exception as e:
+                log(f"[tts] Pollinations POST failed: {e}; falling back to flite")
+
+        # ── 2. Local flite fallback ────────────────────────────────────────────
+        import shutil, tempfile
+        if not shutil.which("flite"):
+            return self._json({"error": "no TTS available (Pollinations key missing, flite not installed)"}, 503)
+        flite_voice = {"nova": "rms", "alloy": "rms", "echo": "rms",
+                       "shimmer": "slt", "fable": "slt", "coral": "slt",
+                       "onyx": "awb"}.get(voice, "rms")
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
+            tmp = tf.name
+        try:
+            subprocess.run(["flite", "-voice", flite_voice, "-t", text, "-o", tmp],
+                           capture_output=True, timeout=30)
+            audio_data = Path(tmp).read_bytes()
+            self._bytes(audio_data, "audio/wav")
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+
     def _wire_app(self):
         """POST /api/wire — run nexus-proxy-wire.sh on a given directory."""
         import subprocess, shlex
@@ -1265,28 +1368,37 @@ class Handler(BaseHTTPRequestHandler):
         '(function(){\n'
         '  var BASE=window.location.origin;\n'
         '\n'
-        '  /* 1 ── fetch interceptor */\n'
-        '  var MAP={\n'
-        '    "api.openai.com":  BASE+"/api/llm/pollinations",\n'
-        '    "api.mistral.ai":  BASE+"/api/llm/mistral",\n'
-        '    "api.groq.com":    BASE+"/api/llm/groq",\n'
-        '    "openrouter.ai":   BASE+"/api/llm/openrouter",\n'
-        '    "aihorde.net":     BASE+"/api/llm/aihorde",\n'
+        '  /* 1 ── fetch interceptor — provider switchable at runtime via window.nxsProvider */\n'
+        '  var _HOSTS=["api.openai.com","api.mistral.ai","api.groq.com","openrouter.ai","aihorde.net"];\n'
+        '  window.nxsProvider=localStorage.getItem("nxs_provider")||"pollinations";\n'
+        '  window.nxsModel=localStorage.getItem("nxs_model")||"";\n'
+        '  window.nxsSetProvider=function(pid,model){\n'
+        '    window.nxsProvider=pid;\n'
+        '    window.nxsModel=model||"";\n'
+        '    localStorage.setItem("nxs_provider",pid);\n'
+        '    if(model) localStorage.setItem("nxs_model",model);\n'
+        '    else localStorage.removeItem("nxs_model");\n'
         '  };\n'
         '  var _f=window.fetch.bind(window);\n'
         '  window.fetch=async function(url,opts){\n'
         '    if(typeof url==="string"){\n'
-        '      for(var host in MAP){\n'
-        '        if(url.indexOf(host)!==-1){\n'
-        '          url=MAP[host]+url.replace(/^https?:\\/\\/[^\\/]+/,"");\n'
-        '          opts=Object.assign({},opts||{});\n'
-        '          opts.headers=Object.assign({},opts.headers||{});\n'
-        '          delete opts.headers["Authorization"];\n'
-        '          delete opts.headers["authorization"];\n'
-        '          break;\n'
+        '      var hit=_HOSTS.some(function(h){return url.indexOf(h)!==-1;});\n'
+        '      if(hit){\n'
+        '        var ep=BASE+"/api/llm/"+window.nxsProvider;\n'
+        '        url=ep+url.replace(/^https?:\\/\\/[^\\/]+/,"");\n'
+        '        opts=Object.assign({},opts||{});\n'
+        '        opts.headers=Object.assign({},opts.headers||{});\n'
+        '        delete opts.headers["Authorization"];\n'
+        '        delete opts.headers["authorization"];\n'
+        '        /* inject model override if set */\n'
+        '        if(window.nxsModel&&opts.body){\n'
+        '          try{\n'
+        '            var b=JSON.parse(opts.body);\n'
+        '            b.model=window.nxsModel;\n'
+        '            opts.body=JSON.stringify(b);\n'
+        '          }catch(e){}\n'
         '        }\n'
         '      }\n'
-        '      /* fix double-v1 from stale IndexedDB config */\n'
         '      url=url.replace(/(\\/api\\/llm\\/[^\\/]+)\\/v1\\/v1\\//,"$1/v1/");\n'
         '    }\n'
         '    return _f(url,opts);\n'
